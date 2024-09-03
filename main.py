@@ -20,7 +20,10 @@ with open('settings.ini') as file:
     data = file.read().split('\n')
     thresh1 = float(data[0])
     thresh2 = float(data[1])
-    delay = float(data[2])
+    after_click_delay = float(data[2])
+    after_input_delay = float(data[3])
+print(thresh1, thresh2, after_click_delay, after_input_delay)
+
 
 def insert_card_data():
     try:
@@ -30,46 +33,36 @@ def insert_card_data():
         target_point = find_target_in_image(make_screenshot(), box_field, thresh1)
         if target_point:
             print('Нашел чекбокс')
-            mouse.move(target_point[0], target_point[1])
-            mouse.click()
-            # pg.click(target_point[0], target_point[1])
+            pg.click(target_point[0], target_point[1])
         else:
             print('Не нашел чекбокс')
 
         target_point = find_target_in_image(make_screenshot(), card_field,  thresh2)
         if target_point:
-            print('Нашел поле карты')
-            # pg.click(target_point[0], target_point[1])
-
-            mouse.move(target_point[0], target_point[1])
-            mouse.click()
-            time.sleep(delay)
             pyperclip.copy(card)
+            print('Нашел поле карты')
+            pg.click(target_point[0], target_point[1])
+            time.sleep(after_click_delay)
             keyboard.release(insert_card_data_key)
             keyboard.send('ctrl+v')
-            time.sleep(0.2)
+            time.sleep(after_input_delay)
 
             pyperclip.copy(exp)
-            # pg.click(target_point[0] + exp_from_card[0], target_point[1] + exp_from_card[1])
-            mouse.move(target_point[0] + exp_from_card[0], target_point[1] + exp_from_card[1])
-            mouse.click()
-            time.sleep(delay)
+            pg.click(target_point[0] + exp_from_card[0], target_point[1] + exp_from_card[1])
+            time.sleep(after_click_delay)
             keyboard.send('ctrl+v')
-            time.sleep(0.2)
+            time.sleep(after_input_delay)
 
             pyperclip.copy(cvv)
-            # pg.click(target_point[0] + cvv_from_card[0], target_point[1] + cvv_from_card[1])
-            mouse.move(target_point[0] + cvv_from_card[0], target_point[1] + cvv_from_card[1])
-            mouse.click()
-            time.sleep(delay)
+            pg.click(target_point[0] + cvv_from_card[0], target_point[1] + cvv_from_card[1])
+            time.sleep(after_click_delay)
             keyboard.send('ctrl+v')
+            time.sleep(after_input_delay)
         else:
             print('Не нашел поле карты')
-        time.sleep(0.5)
-        target_point = find_target_in_image(make_screenshot(), card_confirm_button, 0.8)
-        if target_point:
-            mouse.move(target_point[0], target_point[1])
-            # pg.click(target_point[0], target_point[1])
+        # target_point = find_target_in_image(make_screenshot(), card_confirm_button, thresh2)
+        # if target_point:
+            pg.click(target_point[0], target_point[1])
     except Exception as err:
         print(err)
 
