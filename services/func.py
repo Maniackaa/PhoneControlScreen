@@ -35,4 +35,5 @@ def find_target_in_image(screenshot, target: Target, treshold=0.8):
 
 def make_screenshot():
     screenshot = pyautogui.screenshot()
+    screenshot.save('scr.png')
     return screenshot

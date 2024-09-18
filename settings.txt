@@ -1,0 +1,8 @@
+{
+    "thresh1": 0.7,
+    "thresh2": 0.7,
+    "after_click_delay": 0.5,
+    "after_input_delay": 1.0,
+    "after_amount_delay": 5,
+    "after_amount_limit": 15
+}
