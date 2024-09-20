@@ -67,6 +67,8 @@ async def main():
                         payment_result = await sms_code_input_kapital(device, sms)
                     if payment_result == 'decline':
                         await change_payment_status(payment_id, -1)
+                        await device.restart()
+                        await asyncio.sleep(3)
 
                     if payment_result == 'accept':
                         await change_payment_status(payment_id, 9)
