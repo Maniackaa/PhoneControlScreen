@@ -9,7 +9,7 @@ from services.total_api import device_list
 
 from steps.step_1 import amount_input
 from steps.step_2 import card_data_input
-from steps.step_3 import sms_code_input, sms_code_input_kapital
+from steps.step_3 import sms_code_input_kapital
 """5239151723408467 06/27"""
 
 
