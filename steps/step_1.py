@@ -12,7 +12,7 @@ logger = log.bind(step=1)
 async def amount_input(device: Device, amount):
     res = await device.sendAai(
         params='{action:["click","sleep(500)"],query:"TP:more&&D:Top up"}')
-    logger.debug('result клик:', res.text)
+    logger.debug(f'result клик: {res.text}')
     await wait_new_field(device, params='{query:"TP:findText,Top-up wallet"}')
     # Ввод суммы
     res = await device.sendAai(params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')

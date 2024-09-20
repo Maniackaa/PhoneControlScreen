@@ -10,7 +10,7 @@ from services.total_api import device_list
 from steps.step_1 import amount_input
 from steps.step_2 import card_data_input
 from steps.step_3 import sms_code_input, sms_code_input_kapital
-"""5239151723408467 06/27 499"""
+"""5239151723408467 06/27"""
 
 
 async def main():
@@ -25,12 +25,12 @@ async def main():
                 payments = await get_worker_payments()
                 if payments:
                     payment = payments[0]
-                    logger = log.bind(device=device)
+                    logger = log.bind(device=str(device))
                     logger.info(payment)
                     payment_id = payment['id']
                     card_data = json.loads(payment.get('card_data'))
                     logger.debug(card_data)
-                    amount = card_data['amount']
+                    amount = str(payment['amount'])
                     card = card_data['card_number']
                     exp = f'{card_data["expired_month"]}/{card_data["expired_year"]}'
                     cvv = card_data['cvv']
@@ -60,6 +60,7 @@ async def main():
 
     except Exception as err:
         log.error(err)
+        raise err
 
 
 if __name__ == '__main__':
@@ -67,4 +68,5 @@ if __name__ == '__main__':
         asyncio.run(main())
     except Exception as err:
         log.error(err)
+        raise err
         input('Enter')
