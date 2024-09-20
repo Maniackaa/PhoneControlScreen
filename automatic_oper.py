@@ -74,8 +74,7 @@ async def main():
 
                     logger.info('Скрипт закончил')
 
-            else:
-                await asyncio.sleep(3)
+            await asyncio.sleep(3)
 
     except Exception as err:
         log.error(err)
