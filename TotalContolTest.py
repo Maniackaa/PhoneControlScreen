@@ -30,7 +30,7 @@ def restart(device, token, headers):
         print(res.json(), 'Ждем панель')
         time.sleep(1)
     time.sleep(1)
-    for i in '7350':
+    for i in '7777':
         req_data = {"token": token,
                     'params':
                         f'{{action:"click",query:"TP:more&&D:{i}"}}'
@@ -63,6 +63,7 @@ def restart(device, token, headers):
     res = requests.post(url, json.dumps(req_data), headers=headers)
     print(res.text)
 
+
 def main():
     s = 'sigma:177AE5C7'
     userpass = base64.b64encode(s.encode('utf-8'))
@@ -76,7 +77,6 @@ def main():
         res = requests.get(url, headers=headers)
         print('login:', res.text)
         if res.text:
-            # 解析JSON字符串
             parsed_data = json.loads(res.text)
             token = parsed_data['value']['token']
             print('token:', token)
@@ -199,6 +199,8 @@ def main():
                             }
                 res = requests.post(url, json.dumps(req_data), headers=headers)
                 print('result Вставка cvv:', res.text)
+
+                # Ждем
 
 
 if __name__ == '__main__':

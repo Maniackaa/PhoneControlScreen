@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 import time
 from pathlib import Path
@@ -37,3 +38,32 @@ def make_screenshot():
     screenshot = pyautogui.screenshot()
     screenshot.save('scr.png')
     return screenshot
+
+
+async def wait_new_field(device, params, limit=30):
+    # Ждем поле
+    value = None
+    count = 1
+    while not isinstance(value, dict):
+        if count > limit:
+            return False
+        if count > 5 and count % 3 == 0:
+            await device.input(
+                **{"direction": "down"}
+            )
+        res = await device.sendAai(
+            params=params
+        )
+        print(f'result поиска {params}:', res.text)
+        json_res = res.json()
+        value = json_res.get('value')
+        if isinstance(value, dict):
+            if value.get('count') == 1:
+                break
+        await asyncio.sleep(1)
+        count += 1
+
+    return True
+
+async def get_card_data():
+    return '1;5462631218826164;08/25;299;3434'
