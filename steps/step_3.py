@@ -47,7 +47,7 @@ async def sms_code_input_kapital(device: Device, sms_code):
         if 'wrong' in text.lower():
             logger.info(f'Отклоняем платеж')
             return 'decline'
-        elif 'is on the way' in text.lower():
+        elif 'on the way' in text.lower():
             logger.info(f'Подтверждаем платеж')
             return 'accept'
         await asyncio.sleep(1)

@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import dataclasses
 import datetime
 import json
 import pickle
+from enum import Enum
 
 import requests
 from sqlalchemy import create_engine, ForeignKey, String, DateTime, \
@@ -73,9 +75,18 @@ class User(Base):
 TOKEN = refresh_token()
 
 
+class DeviceStatus(Enum):
+    READY = 'Готовность'
+    STEP1 = 'На шаге 1'
+    STEP2 = 'На шаге 2'
+    STEP3 = 'На шаге 3'
+
+
 @dataclasses.dataclass
 class Device:
+
     device_id: str  # device@1021923620
+    status: Enum = DeviceStatus.READY
 
     @property
     def device_url(self):
@@ -100,10 +111,33 @@ class Device:
         res = requests.post(f'{self.device_url}/screen/texts', json.dumps(req_data))
         return res
 
-    async def read_screen_text(self, rect, lang, mode):
+    async def read_screen_text(self, rect, lang, mode='multiline'):
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
         res = requests.get(url)
         return res.json().get('value', '')
+
+    async def restart(self):
+        url = f'{self.device_url}/apps/com.m10?state=restart&token={TOKEN}'
+        res = requests.post(url)
+        print('result:', res.text)
+
+        value = None
+        while not isinstance(value, dict):
+            res = await self.sendAai(params='{query:"TP:more&&D:7"}')
+            json_res = res.json()
+            value = json_res.get('value')
+            print(value)
+            if isinstance(value, dict):
+                if value.get('count') == 1:
+                    break
+            print(res.json(), 'Ждем панель')
+            await asyncio.sleep(1)
+        await asyncio.sleep(1)
+        for i in '7777':
+            res = await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
+            print('result:', res.text)
+
+        await asyncio.sleep(1)
 
 
 if not database_exists(db_url):

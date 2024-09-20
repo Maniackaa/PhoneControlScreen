@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 
 import aiohttp
 import requests
@@ -67,19 +68,22 @@ async def check_payment(payment_id, count=0) -> dict:
     headers = {
         'Authorization': f'Bearer {data["access"]}'
     }
-    async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
-        async with session.get(url, headers=headers, ssl=False) as response:
-            if response.status == 200:
-                logger.debug(f'{response.status}')
-                result = await response.json()
-                return result
-            elif response.status == 401:
-                if count > 3:
-                    return {'status': 'error check_payment'}
-                logger.debug('Обновляем токен')
-                await asyncio.sleep(count)
-                await refresh_token()
-                return await check_payment(payment_id, count=count + 1)
+    try:
+        async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
+            async with session.get(url, headers=headers, ssl=False) as response:
+                if response.status == 200:
+                    logger.debug(f'{response.status}')
+                    result = await response.json()
+                    return result
+                elif response.status == 401:
+                    if count > 3:
+                        return {'status': 'error check_payment'}
+                    logger.debug('Обновляем токен')
+                    await asyncio.sleep(count)
+                    await refresh_token()
+                    return await check_payment(payment_id, count=count + 1)
+    except Exception as err:
+        logger.error(f'Ошибка: {err}')
 
 
 async def change_payment_status(payment_id: str, status: int):
@@ -110,25 +114,29 @@ async def change_payment_status(payment_id: str, status: int):
 
 
 async def get_worker_payments(count=0):
-    #
+    # Проверка назначенных платежей
+    start = time.perf_counter()
     url = f"{settings.ASU_HOST}/api/v1/worker_payments/"
     logger.debug(f'Проверка payments')
     headers = {
         'Authorization': f'Bearer {data["access"]}'
     }
-    async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
-        async with session.get(url, headers=headers, ssl=False) as response:
-            if response.status == 200:
-                logger.debug(f'{response.status}')
-                result = await response.json()
-                return result.get('results')
-            elif response.status == 401:
-                if count > 3:
-                    return {'status': 'error get_worker_payments'}
-                logger.debug('Обновляем токен')
-                await asyncio.sleep(count)
-                await refresh_token()
-                return await get_worker_payments(count=count + 1)
+    try:
+        async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
+            async with session.get(url, headers=headers, ssl=False) as response:
+                if response.status == 200:
+                    logger.debug(f'{response.status}. {round(time.perf_counter() - start, 2)} c.')
+                    result = await response.json()
+                    return result.get('results')
+                elif response.status == 401:
+                    if count > 3:
+                        return {'status': 'error get_worker_payments'}
+                    logger.debug('Обновляем токен')
+                    await asyncio.sleep(count)
+                    await refresh_token()
+                    return await get_worker_payments(count=count + 1)
+    except Exception as err:
+        logger.warning(f'Ошибка при проверке payments: {err}. {round(time.perf_counter() - start, 2)} c.')
 
 
 async def main():

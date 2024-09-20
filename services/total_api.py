@@ -13,7 +13,11 @@ basic_url = 'http://localhost:8090/TotalControl/v2/devices?token=' + TOKEN
 
 async def device_list():
     result = requests.get(f"{basic_url}" + '&q=all')
-    return result.json().get('ids', [])
+    result = result.json().get('ids')
+    if result == 'null':
+        return []
+    return result
+
 
 
 async def main():

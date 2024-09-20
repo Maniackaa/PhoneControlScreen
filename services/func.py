@@ -40,6 +40,19 @@ def make_screenshot():
     return screenshot
 
 
+async def check_field(device, params):
+    # Ишем есть ли поле
+    res = await device.sendAai(
+        params=params
+    )
+    json_res = res.json()
+    value = json_res.get('value')
+    if isinstance(value, dict):
+        if value.get('count') == 1:
+            return True
+    return False
+
+
 async def wait_new_field(device, params, limit=30):
     # Ждем поле
     value = None
