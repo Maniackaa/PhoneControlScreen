@@ -100,7 +100,7 @@ async def make_job(device):
         raise err
 
     finally:
-        await device.restart()
+        # await device.restart()
         is_ready = await device.ready_check()
         if is_ready:
             device.device_status = DeviceStatus.READY
