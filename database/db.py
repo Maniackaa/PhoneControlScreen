@@ -8,6 +8,7 @@ from enum import Enum
 
 import aiohttp
 import requests
+import sqlalchemy
 from sqlalchemy import create_engine, ForeignKey, String, DateTime, \
     Integer, select, delete, Text, BLOB
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -73,14 +74,47 @@ class User(Base):
         return f'{self.id}. {self.username or "-"} {self.tg_id}'
 
 
-TOKEN = refresh_token()
-
-
 class DeviceStatus(Enum):
+    UNKNOWN = 'Неизвестно'
     READY = 'Готовность'
     STEP1 = 'Шаг 1. Ввод суммы'
     STEP2 = 'Шаг 2. Ввод данных карты'
     STEP3 = 'Шаг 3. Ожидание-Ввод кода'
+    RESTART = 'Перезапуск'
+
+
+class DeviceData(Base):
+    __tablename__ = 'device_data'
+    id: Mapped[int] = mapped_column(primary_key=True,
+                                    autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String(50))
+    device_status: Mapped[Enum] = mapped_column(sqlalchemy.Enum(
+        DeviceStatus,     name="post_status_type",
+        create_constraint=True,
+        metadata=Base.metadata,
+        validate_strings=True,))
+
+    def __str__(self):
+        return f'DeviceData({self.id}. {self.device_id}. {self.device_status})'
+
+TOKEN = refresh_token()
+
+
+def get_or_create_device_data(device_id) -> DeviceData:
+    try:
+        session = Session(expire_on_commit=False)
+        with session:
+            q = select(DeviceData).where(DeviceData.device_id == device_id).limit(1)
+            device_data = session.execute(q).scalar_one_or_none()
+            print(device_data)
+            if not device_data:
+                device_data = DeviceData(device_id=device_id, device_status=DeviceStatus.UNKNOWN)
+                session.add(device_data)
+                session.commit()
+            return device_data
+
+    except Exception as err:
+        logger.error(f'Дата не создана: {err}', exc_info=True)
 
 
 @dataclasses.dataclass
@@ -89,7 +123,23 @@ class Device:
 
     device_id: str  # device@1021923620
     STEP2_END: datetime.datetime = None
-    status: Enum = DeviceStatus.READY
+    # status: Enum = DeviceStatus.UNKNOWN
+    payment: dict = None
+
+    @property
+    def device_status(self):
+        device_data = get_or_create_device_data(self.device_id)
+        return device_data.device_status
+
+    @device_status.setter
+    def device_status(self, status):
+        session = Session(expire_on_commit=False)
+        with session:
+            device_data = get_or_create_device_data(self.device_id)
+            device_data.device_status = status
+            session.add(device_data)
+            session.commit()
+
 
     @property
     def device_url(self):
@@ -97,7 +147,6 @@ class Device:
 
     def logger(self):
         return logger.bind(device_id=self.device_id)
-
 
     async def get_url(self, url, params=None, headers=None) -> dict:
         if headers is None:
@@ -169,7 +218,16 @@ class Device:
         self.logger().debug(res)
         return res
 
+    async def ready_check(self) -> bool:
+        json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
+        value = json_res.get('value')
+        if isinstance(value, dict):
+            if value.get('count') == 1:
+                return True
+        return False
+
     async def restart(self):
+        self.device_status = DeviceStatus.RESTART
         url = f'{self.device_url}/apps/com.m10?state=restart&token={TOKEN}'
         res = await self.post_url(url)
         if not res:
@@ -185,8 +243,9 @@ class Device:
             await asyncio.sleep(1)
         await asyncio.sleep(1)
         for i in '7777':
-            res = await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
-
+            await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
+        if await self.ready_check():
+            self.device_status = DeviceStatus.READY
         await asyncio.sleep(1)
 
 

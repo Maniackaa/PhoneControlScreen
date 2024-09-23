@@ -138,6 +138,7 @@ async def get_worker_payments(count=0):
     except Exception as err:
         logger.warning(f'Ошибка при проверке payments: {err}. {round(time.perf_counter() - start, 2)} c.')
         winsound.PlaySound((BASE_DIR / 'media' / 'sound' / 'wrong.wav').as_posix(), winsound.SND_FILENAME)
+        return []
 
 
 async def main():

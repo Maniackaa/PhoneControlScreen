@@ -19,9 +19,6 @@ class Target:
     y: int
 
 
-
-
-
 def find_target_in_image(screenshot, target: Target, treshold=0.8):
     target_pic = cv2.imread(target.img.as_posix())
     screenshot_np = np.array(screenshot)
