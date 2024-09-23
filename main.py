@@ -76,31 +76,38 @@ def insert_card_data():
 
             time.sleep(1)
             count += 1
+        count = 0
+        while True:
+            time.sleep(1)
+            if count >= after_amount_limit:
+                raise TimeoutError('Время ожидания экрана карты вышло.')
 
-        target_point = find_target_in_image(make_screenshot(), card_field,  thresh2)
-        if target_point:
-            pyperclip.copy(card)
-            print('Нашел поле карты')
-            pg.moveTo(target_point[0], target_point[1])
-            pg.click(target_point[0], target_point[1])
-            time.sleep(after_click_delay)
-            keyboard.release(insert_card_data_key)
-            keyboard.send('ctrl+v')
-            time.sleep(after_input_delay)
+            target_point = find_target_in_image(make_screenshot(), card_field,  thresh2)
+            if target_point:
+                pyperclip.copy(card)
+                print('Нашел поле карты')
+                pg.moveTo(target_point[0], target_point[1])
+                pg.click(target_point[0], target_point[1])
+                time.sleep(after_click_delay)
+                keyboard.release(insert_card_data_key)
+                keyboard.send('ctrl+v')
+                time.sleep(after_input_delay)
 
-            pyperclip.copy(exp)
-            pg.click(target_point[0] + exp_from_card[0], target_point[1] + exp_from_card[1])
-            time.sleep(after_click_delay)
-            keyboard.send('ctrl+v')
-            time.sleep(after_input_delay)
+                pyperclip.copy(exp)
+                pg.click(target_point[0] + exp_from_card[0], target_point[1] + exp_from_card[1])
+                time.sleep(after_click_delay)
+                keyboard.send('ctrl+v')
+                time.sleep(after_input_delay)
 
-            pyperclip.copy(cvv)
-            pg.click(target_point[0] + cvv_from_card[0], target_point[1] + cvv_from_card[1])
-            time.sleep(after_click_delay)
-            keyboard.send('ctrl+v')
-            time.sleep(after_input_delay)
-        else:
-            print('Не нашел поле карты')
+                pyperclip.copy(cvv)
+                pg.click(target_point[0] + cvv_from_card[0], target_point[1] + cvv_from_card[1])
+                time.sleep(after_click_delay)
+                keyboard.send('ctrl+v')
+                time.sleep(after_input_delay)
+                break
+            else:
+                print('Не нашел поле карты')
+                count += 1
         # target_point = find_target_in_image(make_screenshot(), card_confirm_button, thresh2)
         # if target_point:
         #     pg.click(target_point[0], target_point[1])

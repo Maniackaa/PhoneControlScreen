@@ -2,29 +2,74 @@ import asyncio
 import time
 
 from config.bot_settings import logger as log
-from database.db import Device
-from services.func import wait_new_field
+from database.db import Device, DeviceStatus
+from services.func import wait_new_field, check_field
+from services.total_api import device_list
 
 
-logger = log.bind(step=1)
-
-
-async def amount_input(device: Device, amount):
+async def amount_input(device: Device, amount: str) -> bool:
+    """
+    Начало работы
+    1. Жмем кнопку Top up 'TP:more&&D:Top up'
+    2. Ждем поле Top-up wallet 'TP:findText,Top-up wallet' на новом экране 60 с
+    3. Клик - ввод суммы.
+    4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
+    5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
+    """
+    start = time.perf_counter()
+    logger = log.bind(step=1, device=device)
+    logger.info(f'Начинается ввод суммы {amount} azn')
+    is_ready = False
+    while not is_ready:
+        is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+        await asyncio.sleep(1)
     res = await device.sendAai(
         params='{action:["click","sleep(500)"],query:"TP:more&&D:Top up"}')
-    logger.debug(f'result клик: {res.text}')
-    await wait_new_field(device, params='{query:"TP:findText,Top-up wallet"}')
+
+    is_ready = False
+    while not is_ready:
+        is_ready = await check_field(device, '{query:"TP:findText,Top-up wallet"}')
+        await asyncio.sleep(1)
+
     # Ввод суммы
     res = await device.sendAai(params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')
-    logger.debug(f'result Ввод суммы: {res.text}')
+    # logger.debug(f'result Ввод суммы: {res.text}')
     await asyncio.sleep(1)
     # Нажатие продолжить
     res = await device.sendAai(
         params='{action:"click",query:"TP:findText,Continue"}'
     )
-    logger.debug('result продолжить: {res.text}')
-    await asyncio.sleep(1)
-    await wait_new_field(device, params='{query:"TP:more&&R:cardPan"}')
-    logger.info('Ввод суммы закончен. Экран ввода карты готов')
+    await asyncio.sleep(7)
+
+    text = await device.read_screen_text()
+    text = text.get('value', '')
+    if 'failed' in text:
+        await device.restart()
+        return await amount_input(device, amount)
+
+    # Ждем загрузки экрана карты
+    is_ready = False
+    while not is_ready:
+        text = await device.read_screen_text(rect='[52,248,1028,2272]', lang='rus')
+        is_ready = await check_field(device, params='{query:"TP:more&&T:Заполните данные карты"}') or 'Заполните данные карты' in text.get('value', '')
+        logger.debug(f'is_ready: {is_ready}')
+        if is_ready:
+            break
+        await asyncio.sleep(1)
+    end = time.perf_counter()
+    logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({end - start} c.)')
     return True
 
+
+async def main():
+    devices = await device_list()
+    if devices:
+        device = Device(devices[0])
+        start = time.perf_counter()
+        await amount_input(device, '10')
+        end = time.perf_counter()
+        print(end - start)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

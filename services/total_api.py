@@ -19,10 +19,14 @@ async def device_list():
     return result
 
 
-
 async def main():
     try:
-        print(await device_list())
+        devices = await device_list()
+        print(devices)
+        if devices:
+            device = Device(devices[0])
+            print(device)
+            await device.restart()
 
     except Exception as err:
         logger.error(err)
@@ -35,5 +39,5 @@ if __name__ == '__main__':
     except Exception as err:
         logger.error(err)
         input('Нажмите Enter')
-device = Device('1245')
+
 

@@ -1,8 +1,10 @@
 import asyncio
+import datetime
 import json
+import time
 
 from config.bot_settings import logger as log
-from database.db import Device
+from database.db import Device, DeviceStatus
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
 from services.func import get_card_data, wait_new_field, check_field
 from services.total_api import device_list
@@ -26,7 +28,7 @@ async def main():
                 if payments:
                     payment = payments[0]
                     payment_result = None
-                    logger = log.bind(device=str(device))
+                    logger = device.logger()
                     logger.info(payment)
                     payment_id = payment['id']
                     card_data = json.loads(payment.get('card_data'))
@@ -36,11 +38,20 @@ async def main():
                     exp = f'{int(card_data["expired_month"]):02d}/{card_data["expired_year"]}'
                     cvv = card_data['cvv']
                     logger.debug(f'exp: {exp}')
-                    await wait_new_field(device, params='{query:"TP:all&&D:Top up"}')
-                    await amount_input(device, amount)
-                    await card_data_input(device, card,  exp, cvv)
+                    # await wait_new_field(device, params='{query:"TP:all&&D:Top up"}')
 
+                    script_start = time.perf_counter()
+                    device.status = DeviceStatus.STEP1
+                    logger = logger.bind(status=device.status)
+                    await amount_input(device, amount)
+                    device.status = DeviceStatus.STEP2
+                    logger = logger.bind(status=device.status)
+                    await card_data_input(device, card,  exp, cvv)
+                    device.STEP2_END = datetime.datetime.now()
+                    await change_payment_status(payment_id, 5)
                     # Далее ждем смс. Проверяем что на экране нет ошибок
+                    device.status = DeviceStatus.STEP3
+                    logger = logger.bind(status=device.status)
                     sms = ''
                     while True:
                         is_failed = await check_field(device, params='{query:"TP:all&&D:Transaction failed"}')
@@ -48,13 +59,11 @@ async def main():
                             logger.info('Найдено поле Transaction failed')
                             payment_result = 'decline'
                             res = await device.sendAai(params='{action:["click","sleep(500)"],query:"TP:all&&D:Back to main page"}')
-                            logger.debug(f'Back to home page: {res.text}')
                             break
                         is_incorrect = await check_field(device, params='{query:"TP:all&&T:Неверный срок"}') or 'Неверный номер' in await device.read_screen_text(rect='[52,238,1028,2272]', lang='rus')
                         if is_incorrect:
                             logger.info('Найдено поле Неверный срок или Неверный номер')
-                            payment_result = 'decline'
-                            await device.restart()
+                            payment_result = 'decline. restart'
                             break
                         payment_check = await check_payment(payment_id)
                         logger.debug(payment_check)
@@ -62,19 +71,31 @@ async def main():
                         if sms:
                             logger.info('смс код получен')
                             break
+                        delta = (datetime.datetime.now() - device.STEP2_END).total_seconds()
+                        if delta > device.SMS_CODE_TIME_LIMIT:
+                            payment_result = 'decline. restart'
+                            logger.info(f'Время получения кода вышло. payment_result: {payment_result}')
+                            break
+                        else:
+                            logger.debug(f'Прошло {int(delta)} с. после ввода данных карты')
                         await asyncio.sleep(3)
+
+                    logger.debug(f'payment_result: {payment_result}')
                     if not payment_result:
                         payment_result = await sms_code_input_kapital(device, sms)
-                    if payment_result == 'decline':
+                    if 'decline' in payment_result:
+                        logger.info(f'Отклоняем {payment_id}')
                         await change_payment_status(payment_id, -1)
-                        await device.restart()
+                        if 'restart' in payment_result:
+                            await device.restart()
                         await asyncio.sleep(3)
 
                     if payment_result == 'accept':
+                        logger.info(f'Подтверждаем {payment_id}')
                         await change_payment_status(payment_id, 9)
                         await device.sendAai(params='{action:["click","sleep(500)"],query:"D:Back to home page"}')
 
-                    logger.info('Скрипт закончил')
+                    logger.info(f'Скрипт закончил. Result: {payment_result}. Общее время: {time.perf_counter() - script_start} c.')
 
             await asyncio.sleep(3)
 

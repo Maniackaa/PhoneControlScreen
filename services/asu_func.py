@@ -4,10 +4,10 @@ import time
 
 import aiohttp
 import requests
+import winsound
 from aiohttp import ClientTimeout
 
-from config.bot_settings import logger, settings
-
+from config.bot_settings import logger, settings, BASE_DIR
 
 data = {
     'refresh': '',
@@ -137,6 +137,7 @@ async def get_worker_payments(count=0):
                     return await get_worker_payments(count=count + 1)
     except Exception as err:
         logger.warning(f'Ошибка при проверке payments: {err}. {round(time.perf_counter() - start, 2)} c.')
+        winsound.PlaySound((BASE_DIR / 'media' / 'sound' / 'wrong.wav').as_posix(), winsound.SND_FILENAME)
 
 
 async def main():

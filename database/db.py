@@ -6,6 +6,7 @@ import json
 import pickle
 from enum import Enum
 
+import aiohttp
 import requests
 from sqlalchemy import create_engine, ForeignKey, String, DateTime, \
     Integer, select, delete, Text, BLOB
@@ -77,65 +78,114 @@ TOKEN = refresh_token()
 
 class DeviceStatus(Enum):
     READY = 'Готовность'
-    STEP1 = 'На шаге 1'
-    STEP2 = 'На шаге 2'
-    STEP3 = 'На шаге 3'
+    STEP1 = 'Шаг 1. Ввод суммы'
+    STEP2 = 'Шаг 2. Ввод данных карты'
+    STEP3 = 'Шаг 3. Ожидание-Ввод кода'
 
 
 @dataclasses.dataclass
 class Device:
+    SMS_CODE_TIME_LIMIT = 180
 
     device_id: str  # device@1021923620
+    STEP2_END: datetime.datetime = None
     status: Enum = DeviceStatus.READY
 
     @property
     def device_url(self):
         return f'http://localhost:8090/TotalControl/v2/devices/{self.device_id}'
 
+    def logger(self):
+        return logger.bind(device_id=self.device_id)
+
+
+    async def get_url(self, url, params=None, headers=None) -> dict:
+        if headers is None:
+            headers = {}
+        if params is None:
+            params = {}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url,
+                                   headers=headers,
+                                   params=params) as response:
+                if response.status == 200:
+                    result = await response.json(content_type='application/json', encoding='UTF-8')
+                    return result
+
+    async def post_url(self, url, data=None, headers=None) -> dict:
+        if headers is None:
+            headers = {}
+        if data is None:
+            data = {}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url,
+                                        headers=headers,
+                                        data=data
+                                        ) as response:
+                    if response.status == 200:
+                        result = await response.json(content_type='application/json', encoding='UTF-8')
+                        return result
+        except Exception as e:
+            logger.error(e)
+            raise e
+
     async def sendAai(self, params):
-        logger.debug('sendAai', params=params)
         req_data = {"token": TOKEN,
                     'params': params}
-        res = requests.post(f'{self.device_url}/sendAai', json.dumps(req_data))
+        url = f'{self.device_url}/sendAai'
+        res = await self.post_url(url, data=req_data)
+        self.logger().debug(f'sendAai {params}: {res}')
         return res
 
     async def input(self, **kwargs):
         req_data = {"token": TOKEN,
                     **kwargs}
-        res = requests.post(f'{self.device_url}/screen/inputs', json.dumps(req_data))
+        url = f'{self.device_url}/screen/inputs'
+        res = await self.post_url(url, data=req_data)
+        self.logger().debug(f'input {kwargs}: {res}')
+        return res
+
+    async def click(self, x, y):
+        res = await self.input(**{'x': x, 'y': y})
         return res
 
     async def text(self, **kwargs):
+        self.logger().debug(f'text: {kwargs}')
         req_data = {"token": TOKEN,
                     **kwargs}
-        res = requests.post(f'{self.device_url}/screen/texts', json.dumps(req_data))
+        url = f'{self.device_url}/screen/texts'
+        res = await self.post_url(url, req_data)
         return res
 
-    async def read_screen_text(self, rect, lang, mode='multiline'):
+    async def read_screen_text(self, rect='[52,248,1028,2272]', lang='eng', mode='multiline') -> dict:
+        """
+        :param lang: ['eng', 'rus']
+        :param mode: ['multiline', 'singleline']
+        :return: {'status': True, 'value': "respose text\n"}
+        """
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
-        res = requests.get(url)
-        return res.json().get('value', '')
+        res = await self.get_url(url)
+        self.logger().debug(res)
+        return res
 
     async def restart(self):
         url = f'{self.device_url}/apps/com.m10?state=restart&token={TOKEN}'
-        res = requests.post(url)
-        print('result:', res.text)
-
+        res = await self.post_url(url)
+        if not res:
+            return False
         value = None
         while not isinstance(value, dict):
-            res = await self.sendAai(params='{query:"TP:more&&D:7"}')
-            json_res = res.json()
+            json_res = await self.sendAai(params='{query:"TP:all&&D:7"}')
             value = json_res.get('value')
-            print(value)
             if isinstance(value, dict):
                 if value.get('count') == 1:
                     break
-            print(res.json(), 'Ждем панель')
+            self.logger().debug('Ждем панель')
             await asyncio.sleep(1)
         await asyncio.sleep(1)
         for i in '7777':
             res = await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
-            print('result:', res.text)
 
         await asyncio.sleep(1)
 

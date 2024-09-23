@@ -4,9 +4,6 @@ import time
 from pathlib import Path
 
 import pyautogui
-import pyautogui as pg
-import keyboard
-import pyperclip
 import cv2
 import time
 import numpy as np
@@ -20,6 +17,9 @@ class Target:
     img: Path
     x: int
     y: int
+
+
+
 
 
 def find_target_in_image(screenshot, target: Target, treshold=0.8):
@@ -41,11 +41,15 @@ def make_screenshot():
 
 
 async def check_field(device, params):
-    # Ишем есть ли поле
-    res = await device.sendAai(
+    """Ишем есть ли поле
+    :param device:
+    :param params: '{query:"TP:more&&R:cardPan"}'
+    :return:
+    """
+
+    json_res = await device.sendAai(
         params=params
     )
-    json_res = res.json()
     value = json_res.get('value')
     if isinstance(value, dict):
         if value.get('count') == 1:
@@ -53,30 +57,19 @@ async def check_field(device, params):
     return False
 
 
-async def wait_new_field(device, params, limit=30):
+async def wait_new_field(device, params, limit=60):
     # Ждем поле
-    value = None
-    count = 1
-    while not isinstance(value, dict):
-        if count > limit:
-            return False
-        if count > 5 and count % 3 == 0:
-            await device.input(
-                **{"direction": "down"}
-            )
-        res = await device.sendAai(
-            params=params
-        )
-        print(f'result поиска {params}:', res.text)
-        json_res = res.json()
-        value = json_res.get('value')
-        if isinstance(value, dict):
-            if value.get('count') == 1:
-                break
+    is_ready = False
+    count = 0
+    is_ready = await check_field(device, params)
+    while not is_ready:
+        await device.input(code="recentapp")
         await asyncio.sleep(1)
-        count += 1
-
+        await device.input(code="recentapp")
+        await asyncio.sleep(2)
+        is_ready = await check_field(device, params)
     return True
+
 
 async def get_card_data():
     return '1;5462631218826164;08/25;299;3434'
