@@ -9,13 +9,15 @@ from services.asu_func import get_worker_payments, get_token, check_payment, cha
 from services.func import get_card_data, wait_new_field, check_field
 from services.total_api import device_list
 
-from steps.step_1 import amount_input
+from steps.step_1 import amount_input_step
 from steps.step_2 import card_data_input
 from steps.step_3 import sms_code_input_kapital
 """5239151723408467 06/27"""
 
 
 async def make_job(device):
+    logger = device.logger()
+    logger.info(f'make_job: {device}')
     try:
         payment = device.payment
         payment_result = None
@@ -26,6 +28,7 @@ async def make_job(device):
         logger.debug(card_data)
         amount = str(payment['amount'])
         card = card_data['card_number']
+        bank_name = payment['bank_name']
         exp = f'{int(card_data["expired_month"]):02d}/{card_data["expired_year"]}'
         cvv = card_data['cvv']
         logger.debug(f'exp: {exp}')
@@ -34,15 +37,19 @@ async def make_job(device):
         script_start = time.perf_counter()
         device.device_status = DeviceStatus.STEP1
         logger = logger.bind(status=device.device_status)
-        await amount_input(device, amount)
+
+        await amount_input_step(device, amount)
         device.device_status = DeviceStatus.STEP2
         logger = logger.bind(status=device.device_status)
+
         await card_data_input(device, card,  exp, cvv)
         device.STEP2_END = datetime.datetime.now()
+
         await change_payment_status(payment_id, 5)
         # Далее ждем смс. Проверяем что на экране нет ошибок
         device.device_status = DeviceStatus.STEP3
         logger = logger.bind(status=device.device_status)
+
         sms = ''
         while True:
             is_failed = await check_field(device, params='{query:"TP:all&&D:Transaction failed"}')
@@ -69,15 +76,32 @@ async def make_job(device):
                 logger.info('смс код получен')
                 break
             delta = (datetime.datetime.now() - device.STEP2_END).total_seconds()
-            if delta > device.SMS_CODE_TIME_LIMIT:
+            if bank_name in ['leo']:
+                limit = device.LEO_WAIT_LIMIT
+            else:
+                limit = device.SMS_CODE_TIME_LIMIT
+            if delta > limit:
                 payment_result = 'decline. restart'
                 logger.info(f'Время получения кода вышло. payment_result: {payment_result}')
                 break
+
+            text = await device.read_screen_text(rect='[0,0,1080,2000]', lang='eng', mode='multiline')
+            logger.debug(text)
+            text = text.get('value', '').lower()
+            if 'wrong' in text or 'failed' in text:
+                logger.info(f'Отклоняем платеж')
+                payment_result = 'decline'
+                break
+            elif 'on the way' in text.lower():
+                logger.info(f'Подтверждаем платеж')
+                payment_result = 'accept'
+                break
+
             else:
                 logger.debug(f'Прошло {int(delta)} с. после ввода данных карты')
             await asyncio.sleep(3)
 
-        logger.debug(f'payment_result: {payment_result}')
+        logger.info(f'payment_result: {payment_result}')
         if not payment_result:
             payment_result = await sms_code_input_kapital(device, sms)
         if 'decline' in payment_result:
@@ -100,7 +124,6 @@ async def make_job(device):
         raise err
 
     finally:
-        # await device.restart()
         is_ready = await device.ready_check()
         if is_ready:
             device.device_status = DeviceStatus.READY
@@ -109,7 +132,8 @@ async def make_job(device):
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        # asyncio.run(make_job())
+        pass
     except Exception as err:
         log.error(err)
         raise err

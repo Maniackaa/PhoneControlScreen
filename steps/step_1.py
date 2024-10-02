@@ -1,22 +1,23 @@
 import asyncio
+import datetime
 import time
 
 from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
+from services.asu_func import change_payment_status
 from services.func import wait_new_field, check_field
 from services.total_api import device_list
 
 
-async def amount_input(device: Device, amount: str) -> bool:
+async def amount_input(device: Device, amount: str):
     """
-    Начало работы
-    1. Жмем кнопку Top up 'TP:more&&D:Top up'
-    2. Ждем поле Top-up wallet 'TP:findText,Top-up wallet' на новом экране 60 с
-    3. Клик - ввод суммы.
-    4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
-    5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
+        Ввод суммы
+        1. Жмем кнопку Top up 'TP:more&&D:Top up'
+        2. Ждем поле Top-up wallet 'TP:findText,Top-up wallet' на новом экране 60 с
+        3. Клик - ввод суммы.
+        4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
     """
-    start = time.perf_counter()
+
     logger = log.bind(step=1, device=device)
     logger.info(f'Начинается ввод суммы {amount} azn')
     is_ready = False
@@ -32,9 +33,23 @@ async def amount_input(device: Device, amount: str) -> bool:
         await asyncio.sleep(1)
 
     # Ввод суммы
-    res = await device.sendAai(params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')
-    # logger.debug(f'result Ввод суммы: {res.text}')
+    res = await device.sendAai(
+        params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')
     await asyncio.sleep(1)
+
+
+async def amount_input_step(device: Device, amount: str) -> bool:
+    """
+    Ввод суммы
+    1. Жмем кнопку Top up 'TP:more&&D:Top up'
+    2. Ждем поле Top-up wallet 'TP:findText,Top-up wallet' на новом экране 60 с
+    3. Клик - ввод суммы.
+    4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
+    5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
+    """
+    start = time.perf_counter()
+    logger = log.bind(step=1, device=device)
+    await amount_input(device, amount)
     # Нажатие продолжить
     res = await device.sendAai(
         params='{action:"click",query:"TP:findText,Continue"}'
@@ -44,8 +59,9 @@ async def amount_input(device: Device, amount: str) -> bool:
     text = await device.read_screen_text()
     text = text.get('value', '')
     if 'failed' in text:
+        await change_payment_status(device.payment['payment_id'], 4)
         await device.restart()
-        return await amount_input(device, amount)
+
 
     # Ждем загрузки экрана карты
     is_ready = False

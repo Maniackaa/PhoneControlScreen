@@ -142,12 +142,12 @@ async def get_worker_payments(count=0):
 
 
 async def main():
-    status = 9
-    p = await check_payment('6e6f23b4-f049-4b74-ac55-235ee61968d6')
-    print(p)
+    # status = 9
+    # p = await check_payment('6e6f23b4-f049-4b74-ac55-235ee61968d6')
+    # print(p)
     ps = await get_worker_payments()
     print(ps)
-    await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status)
+    # await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status)
 
 
 if __name__ == '__main__':

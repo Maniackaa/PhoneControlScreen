@@ -29,18 +29,22 @@ async def main():
                 if is_ready:
                     device.device_status = DeviceStatus.READY
                     devices.append(device)
+                    print(f'{device_id}: Готов', end='; ')
                 else:
                     device.device_status = DeviceStatus.UNKNOWN
+                    print(f'{device_id}: Не готов', end='; ')
+            print()
 
             payments = await get_worker_payments()
             print(payments)
             for payment in payments:
                 for device in devices:
                     if device.device_status == DeviceStatus.READY:
-                        await change_payment_status(payment_id=payment['id'], status=8)
+
                         device.payment = payment
                         device.device_status = DeviceStatus.STEP1
                         asyncio.create_task(make_job(device))
+                        await change_payment_status(payment_id=payment['id'], status=8)
                         print(f'Стартовала задача: {device, payment}')
                         break
 

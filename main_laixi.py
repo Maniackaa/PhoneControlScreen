@@ -8,7 +8,7 @@ import pyperclip
 from services.func import Target, find_target_in_image, make_screenshot
 
 insert_card_data_key = 'ctrl+q'
-data = "10;5462631218826164;08/25;299;3434"
+data = "1000;5462631218826164;08/25;299;3434"
 
 amount_field = Target(img=Path('media/amount_field.png'), x=40, y=70)
 amount_ok = (50, 500)

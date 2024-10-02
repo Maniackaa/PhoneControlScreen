@@ -106,7 +106,7 @@ def get_or_create_device_data(device_id) -> DeviceData:
         with session:
             q = select(DeviceData).where(DeviceData.device_id == device_id).limit(1)
             device_data = session.execute(q).scalar_one_or_none()
-            print(device_data)
+            logger.debug(device_data)
             if not device_data:
                 device_data = DeviceData(device_id=device_id, device_status=DeviceStatus.UNKNOWN)
                 session.add(device_data)
@@ -120,6 +120,7 @@ def get_or_create_device_data(device_id) -> DeviceData:
 @dataclasses.dataclass
 class Device:
     SMS_CODE_TIME_LIMIT = 180
+    LEO_WAIT_LIMIT = 140
 
     device_id: str  # device@1021923620
     STEP2_END: datetime.datetime = None
@@ -219,6 +220,7 @@ class Device:
         return res
 
     async def ready_check(self) -> bool:
+        # Проверяет готовность ища поле D:Top up
         json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
         value = json_res.get('value')
         if isinstance(value, dict):
