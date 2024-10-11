@@ -3,6 +3,8 @@ import datetime
 import json
 import time
 
+from colorama import Back, Style
+
 from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
@@ -19,11 +21,10 @@ from steps.step_3 import sms_code_input_kapital, sms_code_input_abb
 async def make_job(device):
     logger = device.logger()
     logger.info(f'make_job: {device}')
+    logger = logger.bind(device_id=device.device_id, status=device.device_status)
     try:
         device.job_start()
         payment = device.payment
-        payment_result = None
-        logger = device.logger()
         logger.info(payment)
         payment_id = payment['id']
         card_data = json.loads(payment.get('card_data'))
@@ -33,27 +34,16 @@ async def make_job(device):
         bank_name = payment['bank_name']
         exp = f'{int(card_data["expired_month"]):02d}/{card_data["expired_year"]}'
         cvv = card_data['cvv']
-        logger.debug(f'exp: {exp}')
-        # await wait_new_field(device, params='{query:"TP:all&&D:Top up"}')
 
         script_start = time.perf_counter()
-
-        logger = logger.bind(status=device.device_status)
-
         await amount_input_step(device, amount)
-        device.device_status = DeviceStatus.STEP2
-        logger = logger.bind(status=device.device_status)
-
         await card_data_input(device, card,  exp, cvv)
         device.STEP2_END = datetime.datetime.now()
 
         await change_payment_status(payment_id, 5)
+        device.device_status = DeviceStatus.STEP3_0
         # Далее ждем смс. Проверяем что на экране нет ошибок
-        device.device_status = DeviceStatus.STEP3
-        logger = logger.bind(status=device.device_status)
-
         sms = ''
-        payment_result = ''
         while True:
             text_rus = await device.read_screen_text(lang='rus')
             text_rus = text_rus.get('value', '').lower()
@@ -75,6 +65,7 @@ async def make_job(device):
 
             sms = payment_check.get('sms_code')
             if sms:
+                device.device_status = DeviceStatus.STEP3_1
                 logger.info('смс код получен')
                 break
 
@@ -97,11 +88,14 @@ async def make_job(device):
             await asyncio.sleep(3)
 
         logger.info(f'payment_result: {payment_result}')
+        device.device_status = DeviceStatus.STEP4_0
         if not payment_result:
             if bank_name in ['abb', 'rabit']:
                 payment_result = await sms_code_input_abb(device, sms)
             else:
                 payment_result = await sms_code_input_kapital(device, sms)
+        device.device_status = DeviceStatus.STEP4_5
+
         if 'decline' in payment_result:
             logger.info(f'Отклоняем {payment_id}')
             await change_payment_status(payment_id, -1)
@@ -115,7 +109,7 @@ async def make_job(device):
         if 'restart' in payment_result:
             await device.restart()
 
-        logger.info(f'Скрипт закончил. Result: {payment_result}. Общее время: {time.perf_counter() - script_start} c.')
+        logger.info(f'Скрипт закончил. {Back.GREEN}Result: {payment_result}.{Style.RESET_ALL} Общее время: {time.perf_counter() - script_start} c.')
 
     except Exception as err:
         log.error(err)

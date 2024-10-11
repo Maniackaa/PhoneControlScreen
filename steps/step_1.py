@@ -18,15 +18,16 @@ async def amount_input(device: Device, amount: str):
         4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
     """
 
-    logger = log.bind(step=1, device=device)
+    logger = log.bind(step=device.device_status, device_id=device.device_id)
     logger.info(f'Начинается ввод суммы {amount} azn')
     is_ready = False
     while not is_ready:
         is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
         await asyncio.sleep(1)
+
     res = await device.sendAai(
         params='{action:["click","sleep(500)"],query:"TP:more&&D:Top up"}')
-
+    device.device_status = DeviceStatus.STEP1_0
     is_ready = False
     while not is_ready:
         is_ready = await check_field(device, '{query:"TP:findText,Top-up wallet"}')
@@ -36,6 +37,7 @@ async def amount_input(device: Device, amount: str):
     res = await device.sendAai(
         params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')
     await asyncio.sleep(1)
+    device.device_status = DeviceStatus.STEP1_1
 
 
 async def amount_input_step(device: Device, amount: str) -> bool:
@@ -48,12 +50,13 @@ async def amount_input_step(device: Device, amount: str) -> bool:
     5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
     """
     start = time.perf_counter()
-    logger = log.bind(step=1, device=device)
+    logger = log.bind(step=device.device_status, device_id=device.device_id)
     await amount_input(device, amount)
     # Нажатие продолжить
     res = await device.sendAai(
         params='{action:"click",query:"TP:findText,Continue"}'
     )
+    device.device_status = DeviceStatus.STEP1_2
     await asyncio.sleep(7)
 
     text = await device.read_screen_text()
@@ -62,7 +65,6 @@ async def amount_input_step(device: Device, amount: str) -> bool:
         await change_payment_status(device.payment['payment_id'], 4)
         await device.restart()
 
-
     # Ждем загрузки экрана карты
     is_ready = False
     while not is_ready:
@@ -70,11 +72,11 @@ async def amount_input_step(device: Device, amount: str) -> bool:
         is_ready = await check_field(device, params='{query:"TP:more&&T:Заполните данные карты"}') or 'Заполните данные карты' in text.get('value', '')
         logger.debug(f'is_ready: {is_ready}')
         if is_ready:
+            device.device_status = DeviceStatus.STEP2_0
+            end = time.perf_counter()
+            logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({end - start} c.)')
             break
         await asyncio.sleep(1)
-    end = time.perf_counter()
-    logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({end - start} c.)')
-    return True
 
 
 async def main():

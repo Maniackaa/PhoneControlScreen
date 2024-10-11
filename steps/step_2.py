@@ -3,7 +3,7 @@ import datetime
 import time
 
 from config.bot_settings import logger as log
-from database.db import Device
+from database.db import Device, DeviceStatus
 from services.func import wait_new_field, check_field
 from services.total_api import device_list
 
@@ -35,24 +35,14 @@ async def card_data_input(device: Device, card, exp, cvv):
     await device.sendAai(f'{{action: "setText({exp})", query: "BP:editable&&IX:1"}}')
     await device.sendAai(f'{{action: "setText({cvv})", query: "BP:editable&&IX:2"}}')
     # await asyncio.sleep(1)
-
     # Клик на продолжить
     # res = await device.sendAai(params='{action:"click",query:"TP:more&&R:card-pay-btn"}' )
     res = await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
     if res.get('value') == {'retval': True}:
         logger.info('Ввод данных карты завершен. Кнопка нажата')
+        device.device_status = DeviceStatus.STEP2_1
     else:
         return 'unknown'
-
-    # text = await device.read_screen_text()
-    # text = text.get('value', '')
-    # while 'Enter dynamic password' not in text:
-    #     await asyncio.sleep(1)
-    #     text = await device.read_screen_text()
-    #     text = text.get('value', '')
-    #
-    # logger.info('Ввод данных карты завершен. Экран кода загружен')
-    # return True
 
 
 async def main():

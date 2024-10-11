@@ -3,9 +3,8 @@ import datetime
 import time
 
 from config.bot_settings import logger as log
-from database.db import Device
-from services.func import wait_new_field, check_field
-
+from database.db import Device, DeviceStatus
+from services.func import wait_new_field, check_field, check_bad_result
 
 # async def sms_code_input(device: Device, sms_code):
 #
@@ -46,6 +45,7 @@ async def ready_wait(device, field_query):
         log.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
         await asyncio.sleep(2)
         is_ready = await check_field(device, field_query)
+        await asyncio.sleep(1)
     return True
 
 
@@ -54,38 +54,56 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
     Ввод смс кода банка Капитал
     1. Ждем поле ввода кода 'R:otpPart1'. Кликаем на 100, 940
     """
-    logger = log.bind(step=3)
-    text = await device.read_screen_text()
-    text = text.get('value', '')
-    while 'Enter dynamic password' not in text:
+    logger = log.bind(step=device.device_status, device_id=device.device_id)
+    text_eng = await device.read_screen_text()
+    text_eng = text_eng.get('value', '')
+    while 'enter dynamic' not in text_eng:
+        logger.debug(f'Ищем Enter dynamic')
         await asyncio.sleep(1)
-        text = await device.read_screen_text()
-        text = text.get('value', '')
-
-    field_query = '{query:"BP:editable&&IX:3"}'
+        text_rus = await device.read_screen_text(lang='rus')
+        text_rus = text_rus.get('value', '').lower()
+        text_eng = await device.read_screen_text(lang='eng')
+        text_eng = text_eng.get('value', '').lower()
+        payment_result = await check_bad_result(device, text_rus, text_eng)
+        if payment_result:
+            device.device_status = DeviceStatus.STEP4_5
+            return payment_result
+    device.device_status = DeviceStatus.STEP4_1
+    field_query = '{query:"R:otpPart1"}'
     await ready_wait(device, field_query)
+    device.device_status = DeviceStatus.STEP4_2
 
-    await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"BP:editable&&IX:3"}}')
-    await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"BP:editable&&IX:4"}}')
-    await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"BP:editable&&IX:5"}}')
-    await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"BP:editable&&IX:6"}}')
+    # await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"BP:editable&&IX:3"}}')
+    # await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"BP:editable&&IX:4"}}')
+    # await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"BP:editable&&IX:5"}}')
+    # await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"BP:editable&&IX:6"}}')
+    #sendAai(params='{action:["click","sleep(500)"],query:"TP:all&&D:Back to main page"}')
+    await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"TP:more&&R:otpPart1"}}')
+    await asyncio.sleep(0.5)
+    await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"TP:more&&R:otpPart2"}}')
+    await asyncio.sleep(0.5)
+    await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"TP:more&&R:otpPart3"}}')
+    await asyncio.sleep(0.5)
+    await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"TP:more&&R:otpPart4"}}')
+    await asyncio.sleep(0.5)
+    device.device_status = DeviceStatus.STEP4_3
     while True:
-        text = await device.read_screen_text(lang='eng', mode='multiline')
-        logger.debug(text)
-        text = text.get('value', '').lower()
-        if 'wrong' in text or 'failed' in text:
-            logger.info(f'Отклоняем платеж')
-            return 'decline. restart'
-        elif 'on the way' in text.lower():
+        text_rus = await device.read_screen_text(lang='rus')
+        text_rus = text_rus.get('value', '').lower()
+        text_eng = await device.read_screen_text(lang='eng')
+        text_eng = text_eng.get('value', '').lower()
+        payment_result = await check_bad_result(device, text_rus, text_eng)
+        device.device_status = DeviceStatus.STEP4_4
+        if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
-            return 'accept'
+            payment_result = 'accept'
+        if payment_result:
+            return payment_result
         await asyncio.sleep(1)
-    # await wait_new_field(device, params='{query:"D:Payment is on the way"}')
-    # await wait_new_field(device, params='{query:"D:Back to home page"}')
 
 
 async def sms_code_input_abb(device: Device, sms_code) -> str:
-    logger = log.bind(step=3, device_id = device.device_id)
+    logger = log.bind(step=device.device_status, device_id=device.device_id)
     text = await device.read_screen_text(lang='rus')
     text = text.get('value', '').lower()
     while 'введите' not in text:
@@ -94,20 +112,24 @@ async def sms_code_input_abb(device: Device, sms_code) -> str:
         await asyncio.sleep(1)
         text = await device.read_screen_text(lang='rus')
         text = text.get('value', '').lower()
+    device.device_status = DeviceStatus.STEP4_1
     field_query = '{query:"TP:more&&R:psw_id"}'
     await ready_wait(device, field_query)
-
+    device.device_status = DeviceStatus.STEP4_2
     await device.sendAai(params=f'{{action:"setText({sms_code})",query:"TP:more&&R:psw_id"}}')
+    device.device_status = DeviceStatus.STEP4_3
     await device.click_on_field('R:btnSubmit')
+    device.device_status = DeviceStatus.STEP4_4
     while True:
         text_eng = await device.read_screen_text(lang='eng')
         text_eng = text_eng.get('value', '').lower()
         text_rus = await device.read_screen_text(lang='rus')
         text_rus = text_rus.get('value', '').lower()
-        if 'wrong' in text_eng or 'failed' in text_eng or 'неверный' in text_rus:
-            logger.info(f'Отклоняем платеж')
-            return 'decline. restart'
-        elif 'on the way' in text_eng.lower():
+        payment_result = await check_bad_result(device, text_rus, text_eng)
+        if payment_result:
+
+            return payment_result
+        if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
             return 'accept'
         await asyncio.sleep(1)

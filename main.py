@@ -45,12 +45,12 @@ async def main():
                         ready_devices.append(device)
                         device_text += (
                             f'{num}) {device_id}: {Back.GREEN}Готов   {Style.RESET_ALL}'
-                            f'({device.device_status}) \n'
+                            f'({device.device_status.name} {device.device_status.value}) \n'
                         )
                     else:
                         device_text += f'{num}) {device_id}: {Back.RED}Неизвестная херня!  {Style.RESET_ALL}\n'
                 else:
-                    device_text += f'{num}) {device_id}: {Back.YELLOW}Занят  {Style.RESET_ALL} ({device.device_status}  {device.timer})\n'
+                    device_text += f'{num}) {device_id}: {Back.YELLOW}Занят  {Style.RESET_ALL} ({device.device_status.name} {device.device_status.value}  {device.timer})\n'
             print()
             print(device_text)
 
@@ -60,7 +60,7 @@ async def main():
                 for device in ready_devices:
                     if device.device_status == DeviceStatus.READY:
                         device.payment = payment
-                        device.device_status = DeviceStatus.STEP1
+                        device.device_status = DeviceStatus.STEP0
                         device.JOB_START = datetime.datetime.now()
                         asyncio.create_task(make_job(device))
                         await change_payment_status(payment_id=payment['id'], status=8)

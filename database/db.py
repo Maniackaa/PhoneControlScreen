@@ -77,9 +77,20 @@ class User(Base):
 class DeviceStatus(Enum):
     UNKNOWN = 'Неизвестно'
     READY = 'Готовность'
-    STEP1 = 'Шаг 1. Ввод суммы'
-    STEP2 = 'Шаг 2. Ввод данных карты'
-    STEP3 = 'Шаг 3. Ожидание-Ввод кода'
+    STEP0 = 'Назначен платеж'
+    STEP1_0 = 'Шаг 1. Нажата кнопка TopUp'
+    STEP1_1 = 'Шаг 1. Сумма введена'
+    STEP1_2 = 'Шаг 1. Нажата кнопка далее'
+    STEP2_0 = 'Шаг 2. На экране ввода карты'
+    STEP2_1 = 'Шаг 2. Данные карты введены. Кнопка нажата'
+    STEP3_0 = 'Шаг 3. Ожидание-Ввод кода'
+    STEP3_1 = 'Шаг 3. Смс-код получен'
+    STEP4_0 = 'Шаг 4. Ввод СМС'
+    STEP4_1 = 'Шаг 4. На экране ввода смс'
+    STEP4_2 = 'Шаг 4. Опознаны поля для ввода цифр'
+    STEP4_3 = 'Шаг 4. Вставлены цифры смс'
+    STEP4_4 = 'Шаг 4. Ожидание результата после ввода смс'
+    STEP4_5 = 'Шаг 4. Финал'
     RESTART = 'Перезапуск'
     END = 'Скрипт отработал'
 
@@ -139,7 +150,7 @@ class Device:
         session = Session(expire_on_commit=False)
         with session:
             device_data = get_or_create_device_data(self.device_id)
-            device_data.device_status = DeviceStatus.STEP1
+            device_data.device_status = DeviceStatus.STEP0
             device_data.start_job_time = datetime.datetime.now()
             session.add(device_data)
             session.commit()
@@ -242,7 +253,7 @@ class Device:
         """
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
         res = await self.get_url(url)
-        self.logger().debug(res)
+        self.logger().debug(repr(res))
         return res
 
     async def ready_response_check(self) -> bool:
