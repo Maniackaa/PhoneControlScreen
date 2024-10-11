@@ -69,7 +69,7 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
             device.device_status = DeviceStatus.STEP4_5
             return payment_result
     device.device_status = DeviceStatus.STEP4_1
-    field_query = '{query:"R:otpPart1"}'
+    field_query = '{query:"TP:more&&R:otpPart1"}'
     await ready_wait(device, field_query)
     device.device_status = DeviceStatus.STEP4_2
 
@@ -133,12 +133,6 @@ async def sms_code_input_abb(device: Device, sms_code) -> str:
             logger.info(f'Подтверждаем платеж')
             return 'accept'
         await asyncio.sleep(1)
-
-
-
-
-
-
 
 
 async def main():
