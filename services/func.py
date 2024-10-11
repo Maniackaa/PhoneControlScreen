@@ -8,6 +8,9 @@ import cv2
 import time
 import numpy as np
 
+from config.bot_settings import logger
+from database.db import Device
+
 data = "10;5402691959414698;08/25;299;3434"
 amount, card, exp, cvv, sms = data.split(';')
 
@@ -52,6 +55,22 @@ async def check_field(device, params):
         if value.get('count') == 1:
             return True
     return False
+
+
+async def check_bad_result(device: Device, text_rus, text_eng) -> str:
+
+    log = logger.bind(device_id=device.device_id)
+    payment_result = ''
+    is_failed = await check_field(device, params='{query:"TP:all&&D:Transaction failed"}')
+    if is_failed:
+        log.info('Найдено поле Transaction failed')
+        payment_result = 'decline'
+    is_incorrect = 'неверный' in text_rus or 'wrong' in text_eng or 'failed' in text_eng
+    if is_incorrect:
+        logger.info('Найдено поле Неверный срок или Неверный номер')
+        payment_result = 'decline. restart'
+    return payment_result
+
 
 
 async def wait_new_field(device, params, limit=60):

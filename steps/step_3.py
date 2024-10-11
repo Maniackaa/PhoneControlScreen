@@ -37,6 +37,18 @@ from services.func import wait_new_field, check_field
 from services.total_api import device_list
 
 
+async def ready_wait(device, field_query):
+    is_ready = False
+    while not is_ready:
+        await device.input(code="recentapp")
+        await asyncio.sleep(1)
+        await device.input(code="recentapp")
+        log.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
+        await asyncio.sleep(2)
+        is_ready = await check_field(device, field_query)
+    return True
+
+
 async def sms_code_input_kapital(device: Device, sms_code) -> str:
     """
     Ввод смс кода банка Капитал
@@ -51,21 +63,14 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
         text = text.get('value', '')
 
     field_query = '{query:"BP:editable&&IX:3"}'
-    is_ready = await check_field(device, field_query)
-    while not is_ready:
-        await device.input(code="recentapp")
-        await asyncio.sleep(1)
-        await device.input(code="recentapp")
-        logger.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
-        await asyncio.sleep(2)
-        is_ready = await check_field(device, field_query)
+    await ready_wait(device, field_query)
 
     await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"BP:editable&&IX:3"}}')
     await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"BP:editable&&IX:4"}}')
     await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"BP:editable&&IX:5"}}')
     await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"BP:editable&&IX:6"}}')
     while True:
-        text = await device.read_screen_text(rect='[0,0,1080,2000]', lang='eng', mode='multiline')
+        text = await device.read_screen_text(lang='eng', mode='multiline')
         logger.debug(text)
         text = text.get('value', '').lower()
         if 'wrong' in text or 'failed' in text:
@@ -77,6 +82,41 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
         await asyncio.sleep(1)
     # await wait_new_field(device, params='{query:"D:Payment is on the way"}')
     # await wait_new_field(device, params='{query:"D:Back to home page"}')
+
+
+async def sms_code_input_abb(device: Device, sms_code) -> str:
+    logger = log.bind(step=3, device_id = device.device_id)
+    text = await device.read_screen_text(lang='rus')
+    text = text.get('value', '').lower()
+    while 'введите' not in text:
+        if device.timer.total_seconds() > Device.SMS_CODE_TIME_LIMIT:
+            return 'decline. restart'
+        await asyncio.sleep(1)
+        text = await device.read_screen_text(lang='rus')
+        text = text.get('value', '').lower()
+    field_query = '{query:"TP:more&&R:psw_id"}'
+    await ready_wait(device, field_query)
+
+    await device.sendAai(params=f'{{action:"setText({sms_code})",query:"TP:more&&R:psw_id"}}')
+    await device.click_on_field('R:btnSubmit')
+    while True:
+        text_eng = await device.read_screen_text(lang='eng')
+        text_eng = text_eng.get('value', '').lower()
+        text_rus = await device.read_screen_text(lang='rus')
+        text_rus = text_rus.get('value', '').lower()
+        if 'wrong' in text_eng or 'failed' in text_eng or 'неверный' in text_rus:
+            logger.info(f'Отклоняем платеж')
+            return 'decline. restart'
+        elif 'on the way' in text_eng.lower():
+            logger.info(f'Подтверждаем платеж')
+            return 'accept'
+        await asyncio.sleep(1)
+
+
+
+
+
+
 
 
 async def main():

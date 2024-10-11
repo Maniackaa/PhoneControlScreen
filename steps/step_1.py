@@ -66,7 +66,7 @@ async def amount_input_step(device: Device, amount: str) -> bool:
     # Ждем загрузки экрана карты
     is_ready = False
     while not is_ready:
-        text = await device.read_screen_text(rect='[52,248,1028,2272]', lang='rus')
+        text = await device.read_screen_text(lang='rus')
         is_ready = await check_field(device, params='{query:"TP:more&&T:Заполните данные карты"}') or 'Заполните данные карты' in text.get('value', '')
         logger.debug(f'is_ready: {is_ready}')
         if is_ready:

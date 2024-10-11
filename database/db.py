@@ -81,6 +81,7 @@ class DeviceStatus(Enum):
     STEP2 = 'Шаг 2. Ввод данных карты'
     STEP3 = 'Шаг 3. Ожидание-Ввод кода'
     RESTART = 'Перезапуск'
+    END = 'Скрипт отработал'
 
 
 class DeviceData(Base):
@@ -93,9 +94,11 @@ class DeviceData(Base):
         create_constraint=True,
         metadata=Base.metadata,
         validate_strings=True,))
+    start_job_time: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
 
     def __str__(self):
         return f'DeviceData({self.id}. {self.device_id}. {self.device_status})'
+
 
 TOKEN = refresh_token()
 
@@ -106,7 +109,6 @@ def get_or_create_device_data(device_id) -> DeviceData:
         with session:
             q = select(DeviceData).where(DeviceData.device_id == device_id).limit(1)
             device_data = session.execute(q).scalar_one_or_none()
-            logger.debug(device_data)
             if not device_data:
                 device_data = DeviceData(device_id=device_id, device_status=DeviceStatus.UNKNOWN)
                 session.add(device_data)
@@ -120,12 +122,27 @@ def get_or_create_device_data(device_id) -> DeviceData:
 @dataclasses.dataclass
 class Device:
     SMS_CODE_TIME_LIMIT = 180
-    LEO_WAIT_LIMIT = 140
+    LEO_WAIT_LIMIT = 130
 
     device_id: str  # device@1021923620
     STEP2_END: datetime.datetime = None
     # status: Enum = DeviceStatus.UNKNOWN
     payment: dict = None
+
+    @property
+    def timer(self):
+        device_data = get_or_create_device_data(self.device_id)
+        delta = datetime.datetime.now() - device_data.start_job_time
+        return delta
+
+    def job_start(self):
+        session = Session(expire_on_commit=False)
+        with session:
+            device_data = get_or_create_device_data(self.device_id)
+            device_data.device_status = DeviceStatus.STEP1
+            device_data.start_job_time = datetime.datetime.now()
+            session.add(device_data)
+            session.commit()
 
     @property
     def device_status(self):
@@ -137,10 +154,12 @@ class Device:
         session = Session(expire_on_commit=False)
         with session:
             device_data = get_or_create_device_data(self.device_id)
+            old_status = device_data.device_status
             device_data.device_status = status
             session.add(device_data)
             session.commit()
-
+            if old_status != status:
+                logger.debug(f'Изменен статус {self.device_id} на {status}')
 
     @property
     def device_url(self):
@@ -200,6 +219,12 @@ class Device:
         res = await self.input(**{'x': x, 'y': y})
         return res
 
+    async def click_on_field(self, field):
+        res = await self.sendAai(
+                params=f'{{action:"click",query:"{field}"}}'
+            )
+        return res
+
     async def text(self, **kwargs):
         self.logger().debug(f'text: {kwargs}')
         req_data = {"token": TOKEN,
@@ -211,7 +236,8 @@ class Device:
     async def read_screen_text(self, rect='[52,248,1028,2272]', lang='eng', mode='multiline') -> dict:
         """
         :param lang: ['eng', 'rus']
-        :param mode: ['multiline', 'singleline']
+        :param mode
+        : ['multiline', 'singleline']
         :return: {'status': True, 'value': "respose text\n"}
         """
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
@@ -219,7 +245,7 @@ class Device:
         self.logger().debug(res)
         return res
 
-    async def ready_check(self) -> bool:
+    async def ready_response_check(self) -> bool:
         # Проверяет готовность ища поле D:Top up
         json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
         value = json_res.get('value')
@@ -227,6 +253,10 @@ class Device:
             if value.get('count') == 1:
                 return True
         return False
+
+    async def db_ready_check(self) -> bool:
+        # Проверяет готовность по базе
+        return self.device_status
 
     async def restart(self):
         self.device_status = DeviceStatus.RESTART
@@ -246,9 +276,7 @@ class Device:
         await asyncio.sleep(1)
         for i in '7777':
             await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
-        if await self.ready_check():
-            self.device_status = DeviceStatus.READY
-        await asyncio.sleep(1)
+        self.device_status = DeviceStatus.END
 
 
 if not database_exists(db_url):
