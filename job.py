@@ -21,7 +21,7 @@ from steps.step_3 import sms_code_input_kapital, sms_code_input_abb
 async def make_job(device):
     logger = device.logger()
     logger.info(f'make_job: {device}')
-    logger = logger.bind(device_id=device.device_id, status=device.device_status)
+    logger = logger.bind(device_id=device.device_id)
     try:
         device.job_start()
         payment = device.payment
@@ -38,7 +38,7 @@ async def make_job(device):
         script_start = time.perf_counter()
         await amount_input_step(device, amount)
         await card_data_input(device, card,  exp, cvv)
-        device.STEP2_END = datetime.datetime.now()
+        device.STEP2_END = datetime.datetime.now()  # Время ввода данных карты
 
         await change_payment_status(payment_id, 5)
         device.device_status = DeviceStatus.STEP3_0
@@ -69,14 +69,15 @@ async def make_job(device):
                 logger.info('смс код получен')
                 break
 
-            delta = (datetime.datetime.now() - device.STEP2_END).total_seconds()
             if bank_name in ['leo']:
                 limit = device.LEO_WAIT_LIMIT
             else:
                 limit = device.SMS_CODE_TIME_LIMIT
+
+            delta = (datetime.datetime.now() - device.STEP2_END).total_seconds()
             if delta > limit:
                 payment_result = 'decline. restart'
-                logger.info(f'Время получения кода вышло. payment_result: {payment_result}')
+                logger.info(f'{Back.YELLOW}Время получения кода вышло.{Style.RESET_ALL} payment_result: {payment_result}')
                 break
 
             if 'on the way' in text_eng:
@@ -84,7 +85,7 @@ async def make_job(device):
                 payment_result = 'accept'
                 break
             else:
-                logger.debug(f'Прошло {int(delta)} с. после ввода данных карты')
+                logger.info(f'Прошло {int(delta)} с. после ввода данных карты')
             await asyncio.sleep(3)
 
         logger.info(f'payment_result: {payment_result}')
@@ -109,15 +110,33 @@ async def make_job(device):
         if 'restart' in payment_result:
             await device.restart()
 
-        logger.info(f'Скрипт закончил. {Back.GREEN}Result: {payment_result}.{Style.RESET_ALL} Общее время: {time.perf_counter() - script_start} c.')
+        logger.info(f'Логика закончена. {Back.GREEN}Result: {payment_result}.{Style.RESET_ALL} Общее время: {time.perf_counter() - script_start} c.')
 
-    except Exception as err:
-        log.error(err)
-        raise err
+    except asyncio.TimeoutError as e:
+        log.warning(f'Timeout: {e}')
+        await change_payment_status(device.payment['id'], -1)
+        logger.info('Платеж отклонен')
+
+    except Exception as e:
+        log.error(e)
+        raise e
 
     finally:
         await device.click_on_field(field="D:Back to home page")
+        device.start_job_time = None
+        await asyncio.sleep(10)
+        is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+        if is_ready:
+            pass
+        else:
+            # text_rus = await device.read_screen_text(lang='rus')
+            # text_rus = text_rus.get('value', '').lower()
+            # text_eng = await device.read_screen_text(lang='eng')
+            # text_eng = text_eng.get('value', '').lower()
+            # bad = await check_bad_result(device, text_rus, text_eng)
+            await device.restart()
         device.device_status = DeviceStatus.END
+        logger.info('Телефон готов после скрипта')
 
 
 if __name__ == '__main__':

@@ -1,7 +1,3 @@
-
-
-
-
 import asyncio
 import time
 
@@ -12,18 +8,25 @@ from services.total_api import device_list
 async def main():
     devices = await device_list()
     print(devices)
-    sms_code = '2234'
     if devices:
         device = Device(devices[0])
-        await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"TP:more&&R:otpPart1"}}')
-        await asyncio.sleep(0.5)
-        await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"TP:more&&R:otpPart2"}}')
-        await asyncio.sleep(0.5)
-        await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"TP:more&&R:otpPart3"}}')
-        await asyncio.sleep(0.5)
-        await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"TP:more&&R:otpPart4"}}')
-        await asyncio.sleep(0.5)
+        print(device)
+        sms_code = '1234'
+        await device.click(150, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[0]}')
 
+        await device.click(400, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[1]}')
+
+        await device.click(680, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[2]}')
+
+        await device.click(950, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[3]}')
 
 
 if __name__ == '__main__':

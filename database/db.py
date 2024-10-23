@@ -50,12 +50,10 @@ class Base(DeclarativeBase):
     def set(self, key, value):
         _session = Session(expire_on_commit=False)
         with _session:
-            if isinstance(value, str):
-                value = value[:999]
             setattr(self, key, value)
             _session.add(self)
             _session.commit()
-            logger.debug(f'Изменено значение {key} на {value}')
+            # logger.debug(f'Изменено значение {key} на {value}')
             return self
 
 
@@ -100,12 +98,15 @@ class DeviceData(Base):
     id: Mapped[int] = mapped_column(primary_key=True,
                                     autoincrement=True)
     device_id: Mapped[str] = mapped_column(String(50))
+    device_name: Mapped[str] = mapped_column(String(50), nullable=True)
     device_status: Mapped[Enum] = mapped_column(sqlalchemy.Enum(
         DeviceStatus,     name="post_status_type",
         create_constraint=True,
         metadata=Base.metadata,
         validate_strings=True,))
     start_job_time: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
+    screen_text: Mapped[str] = mapped_column(Text(), nullable=True)
+    last_screen_change: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
 
     def __str__(self):
         return f'DeviceData({self.id}. {self.device_id}. {self.device_status})'
@@ -132,8 +133,8 @@ def get_or_create_device_data(device_id) -> DeviceData:
 
 @dataclasses.dataclass
 class Device:
-    SMS_CODE_TIME_LIMIT = 180
-    LEO_WAIT_LIMIT = 130
+    SMS_CODE_TIME_LIMIT = 190
+    LEO_WAIT_LIMIT = 140
 
     device_id: str  # device@1021923620
     STEP2_END: datetime.datetime = None
@@ -141,10 +142,18 @@ class Device:
     payment: dict = None
 
     @property
-    def timer(self):
+    def device_data(self):
+        data = get_or_create_device_data(self.device_id)
+        return data
+
+    @property
+    def timer(self) -> int:
+        # Таймер показывает сколько прошло секунд от начала JOB
         device_data = get_or_create_device_data(self.device_id)
-        delta = datetime.datetime.now() - device_data.start_job_time
-        return delta
+        if device_data.start_job_time:
+            delta = (datetime.datetime.now() - device_data.start_job_time).total_seconds()
+            return round(delta, 1)
+        return 0
 
     def job_start(self):
         session = Session(expire_on_commit=False)
@@ -152,8 +161,26 @@ class Device:
             device_data = get_or_create_device_data(self.device_id)
             device_data.device_status = DeviceStatus.STEP0
             device_data.start_job_time = datetime.datetime.now()
+            device_data.last_screen_change = datetime.datetime.now()
             session.add(device_data)
             session.commit()
+
+    @property
+    def start_job_time(self):
+        device_data = get_or_create_device_data(self.device_id)
+        return device_data.start_job_time
+
+    @start_job_time.setter
+    def start_job_time(self, value):
+        session = Session(expire_on_commit=False)
+        with session:
+            device_data = get_or_create_device_data(self.device_id)
+            old_value = device_data.start_job_time
+            device_data.start_job_time = value
+            session.add(device_data)
+            session.commit()
+            if old_value != value:
+                logger.debug(f'Изменен счетчик таймера {self.device_id} на {value}')
 
     @property
     def device_status(self):
@@ -172,14 +199,49 @@ class Device:
             if old_status != status:
                 logger.debug(f'Изменен статус {self.device_id} на {status}')
 
+    async def check_timer(self):
+        # Проверка не завис ли экран или не вышел ли таймер
+        if self.start_job_time:
+            if self.timer > settings.JOB_TIME_LIMIT:
+                self.start_job_time = None
+                raise asyncio.TimeoutError(self.device_id)
+
+            # rect = '[52,248,1028,2272]'
+            # lang = 'eng'
+            # mode = 'multiline'
+            # url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
+            # device_data = self.device_data
+            # delta = (datetime.datetime.now() - device_data.last_screen_change).total_seconds()
+            # if delta > 10:
+            #     async with aiohttp.ClientSession() as session:
+            #         async with session.get(url) as response:
+            #             if response.status == 200:
+            #                 result = await response.json(content_type='application/json', encoding='UTF-8')
+            #                 text = result.get('value', '')
+            #                 old_text = self.device_data.screen_text
+            #
+            #                 if old_text == text:
+            #                     # Текст не изменился
+            #
+            #                     print(f'Текст не менялся {delta}')
+            #                     if delta > settings.SCREEN_TIME_LIMIT and self.start_job_time:
+            #                         logger.warning(f'Завис более {settings.SCREEN_TIME_LIMIT} сек')
+            #                         self.start_job_time = None
+            #                         raise asyncio.TimeoutError(self.device_id)
+            #                 else:
+            #                     # Изменился
+            #                     device_data.set('last_screen_change', datetime.datetime.now())
+            #                     device_data.set('screen_text', text)
+
     @property
-    def device_url(self):
+    def device_url(self) -> str:
         return f'http://localhost:8090/TotalControl/v2/devices/{self.device_id}'
 
     def logger(self):
         return logger.bind(device_id=self.device_id)
 
     async def get_url(self, url, params=None, headers=None) -> dict:
+        await self.check_timer()
         if headers is None:
             headers = {}
         if params is None:
@@ -193,6 +255,7 @@ class Device:
                     return result
 
     async def post_url(self, url, data=None, headers=None) -> dict:
+        await self.check_timer()
         if headers is None:
             headers = {}
         if data is None:
@@ -209,6 +272,13 @@ class Device:
         except Exception as e:
             logger.error(e)
             raise e
+
+    @property
+    async def info(self):
+        url = f'{self.device_url}?token={TOKEN}'
+        result = await self.get_url(url)
+        value = result.get('value', '')
+        return value
 
     async def sendAai(self, params):
         req_data = {"token": TOKEN,
@@ -237,9 +307,11 @@ class Device:
         return res
 
     async def text(self, **kwargs):
+        # Ввод текста
         self.logger().debug(f'text: {kwargs}')
         req_data = {"token": TOKEN,
                     **kwargs}
+        print(req_data)
         url = f'{self.device_url}/screen/texts'
         res = await self.post_url(url, req_data)
         return res
@@ -288,6 +360,22 @@ class Device:
         for i in '7777':
             await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
         self.device_status = DeviceStatus.END
+
+    async def alt_tab(self):
+        await self.input(code="recentapp")
+        await asyncio.sleep(1)
+        await self.input(code="recentapp")
+        await asyncio.sleep(1)
+
+    async def check_field(self, field):
+        json_res = await self.sendAai(
+            params=f'{{query:"{field}"}}'
+        )
+        value = json_res.get('value')
+        if isinstance(value, dict):
+            if value.get('count') == 1:
+                return True
+        return False
 
 
 if not database_exists(db_url):

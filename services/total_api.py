@@ -11,6 +11,14 @@ from database.db import TOKEN, Device
 basic_url = 'http://localhost:8090/TotalControl/v2/devices?token=' + TOKEN
 
 
+def sync_device_list():
+    result = requests.get(f"{basic_url}" + '&q=all')
+    result = result.json().get('ids')
+    if result == 'null':
+        return []
+    return result
+
+
 async def device_list():
     result = requests.get(f"{basic_url}" + '&q=all')
     result = result.json().get('ids')

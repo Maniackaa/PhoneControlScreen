@@ -62,7 +62,7 @@ async def amount_input_step(device: Device, amount: str) -> bool:
     text = await device.read_screen_text()
     text = text.get('value', '')
     if 'failed' in text:
-        await change_payment_status(device.payment['payment_id'], 4)
+        await change_payment_status(device.payment['id'], 4)
         await device.restart()
 
     # Ждем загрузки экрана карты

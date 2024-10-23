@@ -37,6 +37,7 @@ from services.total_api import device_list
 
 
 async def ready_wait(device, field_query):
+    # Ищет поле field_query. Пока не найдет альттабит
     is_ready = False
     while not is_ready:
         await device.input(code="recentapp")
@@ -69,23 +70,48 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
             device.device_status = DeviceStatus.STEP4_5
             return payment_result
     device.device_status = DeviceStatus.STEP4_1
-    field_query = '{query:"TP:more&&R:otpPart1"}'
-    await ready_wait(device, field_query)
+    # field_query = '{query:"TP:more&&R:otpPart1"}'
+    # await ready_wait(device, field_query)
     device.device_status = DeviceStatus.STEP4_2
 
     # await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"BP:editable&&IX:3"}}')
     # await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"BP:editable&&IX:4"}}')
     # await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"BP:editable&&IX:5"}}')
     # await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"BP:editable&&IX:6"}}')
-    #sendAai(params='{action:["click","sleep(500)"],query:"TP:all&&D:Back to main page"}')
-    await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"TP:more&&R:otpPart1"}}')
-    await asyncio.sleep(0.5)
-    await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"TP:more&&R:otpPart2"}}')
-    await asyncio.sleep(0.5)
-    await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"TP:more&&R:otpPart3"}}')
-    await asyncio.sleep(0.5)
-    await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"TP:more&&R:otpPart4"}}')
-    await asyncio.sleep(0.5)
+
+    await device.alt_tab()
+    if await device.check_field('TP:more&&R:otpPart1'):
+        logger.debug('Найдены поля для цифр')
+        await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"TP:more&&R:otpPart1"}}')
+        await asyncio.sleep(0.5)
+        await device.sendAai(params=f'{{action:"setText({sms_code[1]})",query:"TP:more&&R:otpPart2"}}')
+        await asyncio.sleep(0.5)
+        await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"TP:more&&R:otpPart3"}}')
+        await asyncio.sleep(0.5)
+        await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"TP:more&&R:otpPart4"}}')
+        await asyncio.sleep(0.5)
+    else:
+        logger.debug('Не найдены поля для цифр')
+        await device.click(150, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[0]}')
+        await asyncio.sleep(0.5)
+
+        await device.click(400, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[1]}')
+        await asyncio.sleep(0.5)
+
+        await device.click(680, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[2]}')
+        await asyncio.sleep(0.5)
+
+        await device.click(950, 920)
+        await asyncio.sleep(1)
+        await device.text(text=f'{sms_code[3]}')
+        await asyncio.sleep(1)
+
     device.device_status = DeviceStatus.STEP4_3
     while True:
         text_rus = await device.read_screen_text(lang='rus')
@@ -99,7 +125,7 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
             payment_result = 'accept'
         if payment_result:
             return payment_result
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
 
 
 async def sms_code_input_abb(device: Device, sms_code) -> str:
@@ -107,7 +133,7 @@ async def sms_code_input_abb(device: Device, sms_code) -> str:
     text = await device.read_screen_text(lang='rus')
     text = text.get('value', '').lower()
     while 'введите' not in text:
-        if device.timer.total_seconds() > Device.SMS_CODE_TIME_LIMIT:
+        if device.timer > Device.SMS_CODE_TIME_LIMIT:
             return 'decline. restart'
         await asyncio.sleep(1)
         text = await device.read_screen_text(lang='rus')
@@ -132,7 +158,7 @@ async def sms_code_input_abb(device: Device, sms_code) -> str:
         if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
             return 'accept'
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
 
 
 async def main():

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     ASUPAY_LOGIN: str
     ASUPAY_PASSWORD: str
     ASU_HOST: str
+    JOB_TIME_LIMIT: int
+    SCREEN_TIME_LIMIT: int
+    LOG_LEVEL: str = 'DEBUG'
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 
@@ -90,7 +93,7 @@ def get_my_loggers():
             LogJump(full_path=False),
             structlog.dev.ConsoleRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.LOG_LEVEL)),
         context_class=dict,
         # logger_factory=structlog.PrintLoggerFactory(),
         logger_factory=get_factory(),
