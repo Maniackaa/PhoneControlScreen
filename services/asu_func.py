@@ -113,7 +113,7 @@ async def change_payment_status(payment_id: str, status: int):
         # raise err
 
 
-async def get_worker_payments(count=0):
+async def get_worker_payments(count=0) -> list:
     # Проверка назначенных платежей
     start = time.perf_counter()
     url = f"{settings.ASU_HOST}/api/v1/worker_payments/"
@@ -130,7 +130,8 @@ async def get_worker_payments(count=0):
                     return result.get('results')
                 elif response.status == 401:
                     if count > 3:
-                        return {'status': 'error get_worker_payments'}
+                        logger.warning('Ошибка при проверке payments 3 раза')
+                        return []
                     logger.debug('Обновляем токен')
                     await asyncio.sleep(count)
                     await refresh_token()

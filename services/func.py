@@ -40,7 +40,7 @@ def make_screenshot():
     return screenshot
 
 
-async def check_field(device, params):
+async def check_field(device, params) -> bool:
     """Ишем есть ли поле
     :param device:
     :param params: '{query:"TP:more&&R:cardPan"}'
@@ -57,15 +57,25 @@ async def check_field(device, params):
     return False
 
 
-async def check_bad_result(device: Device, text_rus, text_eng) -> str:
-
+async def check_bad_result(device: Device, text_rus=None, text_eng=None) -> str:
+    """
+    Проверяет признаки плохого платежа: тексты неверный, wrong, failed и поле D:Transaction failed
+    :param device:
+    :param text_rus:
+    :param text_eng:
+    :return: None / 'decline. restart' / 'decline'
+    """
+    if not text_rus:
+        text_rus = await device.read_screen_text(lang='rus')
+    if not text_eng:
+        text_eng = await device.read_screen_text(lang='eng')
     log = logger.bind(device_id=device.device_id)
     payment_result = ''
     is_failed = await check_field(device, params='{query:"TP:all&&D:Transaction failed"}')
     if is_failed:
         log.info('Найдено поле Transaction failed')
         payment_result = 'decline'
-    is_incorrect = 'неверный' in text_rus or 'wrong' in text_eng or 'failed' in text_eng
+    is_incorrect = 'неверный' in text_rus.lower() or 'wrong' in text_eng.lower() or 'failed' in text_eng.lower()
     if is_incorrect:
         logger.info('Найдено поле Неверный срок или Неверный номер')
         payment_result = 'decline. restart'

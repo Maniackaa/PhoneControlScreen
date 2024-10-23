@@ -17,18 +17,13 @@ async def card_data_input(device: Device, card, exp, cvv):
 
 
     """
-    logger = log.bind(step=1, device=device)
+    logger = log.bind(step=device.device_status, device=device)
     logger.debug('Начат ввод данных карты:')
     is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
     while not is_ready:
-        # await device.click(500, 1900)
-        await device.input(code="recentapp")
-        await asyncio.sleep(1)
-        await device.input(code="recentapp")
-        await asyncio.sleep(2)
-
+        await device.alt_tab()
         is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
-    await asyncio.sleep(1)
+        await asyncio.sleep(1)
 
     card_f = f'{card[:4]} {card[4:8]} {card[8:12]} {card[12:]}'
     await device.sendAai(f'{{action: "setText({card_f})", query: "BP:editable&&IX:0"}}')
@@ -42,7 +37,9 @@ async def card_data_input(device: Device, card, exp, cvv):
         logger.info('Ввод данных карты завершен. Кнопка нажата')
         device.device_status = DeviceStatus.STEP2_1
     else:
-        return 'unknown'
+        logger.error(f'Не нажалась кнопка Оплатить!!! Пробую еще раз')
+        await asyncio.sleep(3)
+        await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
 
 
 async def main():

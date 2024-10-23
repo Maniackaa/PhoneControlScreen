@@ -14,17 +14,7 @@ from services.total_api import device_list, sync_device_list
 from colorama import init, Fore, Back, Style
 
 
-from steps.step_1 import amount_input
-from steps.step_2 import card_data_input
-from steps.step_3 import sms_code_input_kapital
-"""5239151723408467 06/27"""
 
-
-async def prepare():
-    devices_ids = await device_list()
-    for num, device_id in enumerate(devices_ids, 1):
-        device = Device(device_id)
-        device.device_status = DeviceStatus.END
 
 
 def testprint1():
@@ -47,31 +37,42 @@ async def key_wait():
         input('Нажмите Enter')
 
 
-async def job1():
+async def job1(device):
+    print(f'Создана для {device}')
+    count = 0
+    total_time = 0
     while True:
-        print(f'job1')
-        await asyncio.sleep(1)
+        start = time.perf_counter()
+        text = await device.read_screen_text(lang='eng')
+        print(device.device_data.device_name, count, repr(text))
+        text = await device.read_screen_text(lang='rus')
+        delta = time.perf_counter() - start
+        total_time += delta
+        print(device.device_data.device_name, count, repr(text))
+        await device.alt_tab()
+        count += 1
+        print(f'Средняя скорость распознавания {device.device_data.device_name:3s}: {round(total_time / count / 2, 2)}')
 
 
 async def main():
     asyncio.create_task(key_wait())
     await get_token()
-    await prepare()
-    tasks = [asyncio.create_task(job1())]
+    devices_ids = await device_list()
+    for num, device_id in enumerate(devices_ids, 1):
+        device = Device(device_id)
+        asyncio.create_task(job1(device))
+    await asyncio.sleep(0)
     while True:
         try:
-            print('main')
+            # print('main')
             devices_ids = await device_list()
             ready_devices = []
             device_text = ''
             for num, device_id in enumerate(devices_ids, 1):
                 device = Device(device_id)
-                print(await device.info)
+                await device.info
+                is_ready = await device.ready_response_check()
 
-            await asyncio.sleep(3)
-            done, pending = await asyncio.wait(tasks, timeout=10)
-            print(done)
-            print(pending)
 
         except asyncio.TimeoutError:
             print('Время1')

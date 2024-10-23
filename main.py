@@ -80,8 +80,6 @@ async def main():
                             if disconnected_device_id == task_name:
                                 log.warning(f'Завершаем JOB {disconnected_device_id}')
                                 task.cancel()
-
-
                         pass
                 connected_devices_ids = set(devices_ids)
 
@@ -92,7 +90,10 @@ async def main():
                 db_status = await device.db_ready_check()
                 if db_status == DeviceStatus.END or db_status == DeviceStatus.READY:
                     # Если скрипт закончен или готов - проверяем экран
+                    start = time.perf_counter()
+
                     is_ready = await device.ready_response_check()
+                    # print(f'время проверки поля: {time.perf_counter() - start} c.')
                     if is_ready:
                         device.device_status = DeviceStatus.READY
                         ready_devices.append(device)
@@ -110,18 +111,18 @@ async def main():
             print(device_text)
 
             payments = await get_worker_payments()
-            print(payments)
+            print(f'Платежей: {len(payments)}')
             for payment in payments:
                 for device in ready_devices:
                     if device.device_status == DeviceStatus.READY:
-                        device.payment = payment
-                        device.device_status = DeviceStatus.STEP0
-                        device.JOB_START = datetime.datetime.now()
-                        asyncio.create_task(make_job(device), name=f'{device.device_id}')
-                        # await asyncio.wait_for(make_job(device), timeout=settings.JOB_TIME_LIMIT)
-                        await change_payment_status(payment_id=payment['id'], status=8)
-                        print(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
-                        break
+                        if device.is_job_free:
+                            device.payment = payment
+                            device.device_status = DeviceStatus.STEP0
+                            device.JOB_START = datetime.datetime.now()
+                            asyncio.create_task(make_job(device), name=f'{device.device_id}')
+                            await change_payment_status(payment_id=payment['id'], status=8)
+                            log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
+                            break
 
             await asyncio.sleep(3)
         except asyncio.TimeoutError as e:

@@ -7,6 +7,7 @@ from colorama import Back, Style
 
 from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
+from exceptions.job_exceptions import DeviceInputAmountException
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
 from services.func import get_card_data, wait_new_field, check_field, check_bad_result
 from services.total_api import device_list
@@ -20,12 +21,12 @@ from steps.step_3 import sms_code_input_kapital, sms_code_input_abb
 
 async def make_job(device):
     logger = device.logger()
-    logger.info(f'make_job: {device}')
+    logger.debug(f'make_job: {device}')
     logger = logger.bind(device_id=device.device_id)
     try:
         device.job_start()
         payment = device.payment
-        logger.info(payment)
+        logger.debug(payment)
         payment_id = payment['id']
         card_data = json.loads(payment.get('card_data'))
         logger.debug(card_data)
@@ -44,12 +45,12 @@ async def make_job(device):
         device.device_status = DeviceStatus.STEP3_0
         # Далее ждем смс. Проверяем что на экране нет ошибок
         sms = ''
-        while True:
-            text_rus = await device.read_screen_text(lang='rus')
-            text_rus = text_rus.get('value', '').lower()
-            text_eng = await device.read_screen_text(lang='eng')
-            text_eng = text_eng.get('value', '').lower()
-
+        payment_result = ''
+        if bank_name in ['leo']:
+            sms_limit_time = device.LEO_WAIT_LIMIT
+        else:
+            sms_limit_time = device.SMS_CODE_TIME_LIMIT
+        while not payment_result:
             payment_check = await check_payment(payment_id)
             logger.debug(payment_check)
             if payment_check.get('status') in [-1, 9]:
@@ -58,6 +59,8 @@ async def make_job(device):
                 logger.debug(f'Уже отклонен. На исходную.')
                 break
 
+            text_rus = await device.read_screen_text(lang='rus')
+            text_eng = await device.read_screen_text(lang='eng')
             payment_result = await check_bad_result(device, text_rus=text_rus, text_eng=text_eng)
             if payment_result:
                 logger.info(f'Найдено плохое поле. {payment_result}')
@@ -69,13 +72,9 @@ async def make_job(device):
                 logger.info('смс код получен')
                 break
 
-            if bank_name in ['leo']:
-                limit = device.LEO_WAIT_LIMIT
-            else:
-                limit = device.SMS_CODE_TIME_LIMIT
-
+            # Сколько прошло со ввода карты
             delta = (datetime.datetime.now() - device.STEP2_END).total_seconds()
-            if delta > limit:
+            if delta > sms_limit_time:
                 payment_result = 'decline. restart'
                 logger.info(f'{Back.YELLOW}Время получения кода вышло.{Style.RESET_ALL} payment_result: {payment_result}')
                 break
@@ -84,8 +83,8 @@ async def make_job(device):
                 logger.info(f'Подтверждаем платеж')
                 payment_result = 'accept'
                 break
-            else:
-                logger.info(f'Прошло {int(delta)} с. после ввода данных карты')
+
+            logger.info(f'Прошло {int(delta)} с. после ввода данных карты')
             await asyncio.sleep(3)
 
         logger.info(f'payment_result: {payment_result}')
@@ -100,12 +99,12 @@ async def make_job(device):
         if 'decline' in payment_result:
             logger.info(f'Отклоняем {payment_id}')
             await change_payment_status(payment_id, -1)
-            await asyncio.sleep(3)
 
         if payment_result == 'accept':
             logger.info(f'Подтверждаем {payment_id}')
             await change_payment_status(payment_id, 9)
             await device.sendAai(params='{action:["click","sleep(500)"],query:"D:Back to home page"}')
+            await asyncio.sleep(5)
 
         if 'restart' in payment_result:
             await device.restart()
@@ -117,14 +116,17 @@ async def make_job(device):
         await change_payment_status(device.payment['id'], -1)
         logger.info('Платеж отклонен')
 
+    except DeviceInputAmountException as e:
+        logger.info('Отправляем платеж заново боту. Телефон на рестарт')
+        await change_payment_status(device.payment['id'], 4)
+
     except Exception as e:
-        log.error(e)
+        log.error(f'Непредвиттденная ошибка: {e}')
         raise e
 
     finally:
         await device.click_on_field(field="D:Back to home page")
         device.start_job_time = None
-        await asyncio.sleep(10)
         is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
         if is_ready:
             pass

@@ -4,45 +4,21 @@ import time
 
 from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
-from services.func import wait_new_field, check_field, check_bad_result
+from services.func import check_field, check_bad_result
 
-# async def sms_code_input(device: Device, sms_code):
-#
-#     res = await device.sendAai(
-#         params='{action:["click","sleep(1000)","click","sleep(500)"],query:"TP:more&&R:psw_id"}'
-#     )
-#     logger.debug(f'Клик на поле sms_code: {res.text}')
-#     await asyncio.sleep(1)
-#
-#     # Вставка sms code
-#     res = await device.text(
-#         text=sms_code
-#     )
-#     logger.debug(f'result Вставка sms_code: {res.text}')
-#
-#     # Клик на отправить
-#     res = await device.sendAai(
-#         params='{action:"click",query:"TP:more&&R:btnSubmit"}'
-#     )
-#     logger.debug(f'result Клик на отправить: {res.text}')
-#
-#     await asyncio.sleep(1)
-#     text_on_screen = await device.text(rect=[126,427,954,2022], lang='rus', mode='multiline')
-#     logger.debug(text_on_screen)
-#     if 'неверный пароль' in text_on_screen:
-#         # Отклоняем платеж
-#         logger.info(f'Отклоняем платеж')
-#         return 'decline'
 from services.total_api import device_list
 
 
-async def ready_wait(device, field_query):
-    # Ищет поле field_query. Пока не найдет альттабит
-    is_ready = False
+async def ready_wait(device, field_query) -> bool:
+    """
+    Ищет поле field_query. Пока не найдет альттабит
+    :param device:
+    :param field_query:
+    :return:
+    """
+    is_ready = await check_field(device, field_query)
     while not is_ready:
-        await device.input(code="recentapp")
-        await asyncio.sleep(1)
-        await device.input(code="recentapp")
+        await device.alt_tab()
         log.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
         await asyncio.sleep(2)
         is_ready = await check_field(device, field_query)
@@ -57,18 +33,16 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
     """
     logger = log.bind(step=device.device_status, device_id=device.device_id)
     text_eng = await device.read_screen_text()
-    text_eng = text_eng.get('value', '')
-    while 'enter dynamic' not in text_eng:
+    while 'enter dynamic' not in text_eng.lower():
         logger.debug(f'Ищем Enter dynamic')
         await asyncio.sleep(1)
-        text_rus = await device.read_screen_text(lang='rus')
-        text_rus = text_rus.get('value', '').lower()
-        text_eng = await device.read_screen_text(lang='eng')
-        text_eng = text_eng.get('value', '').lower()
-        payment_result = await check_bad_result(device, text_rus, text_eng)
+        payment_result = await check_bad_result(device)
         if payment_result:
             device.device_status = DeviceStatus.STEP4_5
             return payment_result
+
+    # Текст Enter dynamic есть ан экране
+
     device.device_status = DeviceStatus.STEP4_1
     # field_query = '{query:"TP:more&&R:otpPart1"}'
     # await ready_wait(device, field_query)
@@ -79,7 +53,9 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
     # await device.sendAai(params=f'{{action:"setText({sms_code[2]})",query:"BP:editable&&IX:5"}}')
     # await device.sendAai(params=f'{{action:"setText({sms_code[3]})",query:"BP:editable&&IX:6"}}')
 
-    await device.alt_tab()
+    if not await device.check_field('TP:more&&R:otpPart1'):
+        await device.alt_tab()
+
     if await device.check_field('TP:more&&R:otpPart1'):
         logger.debug('Найдены поля для цифр')
         await device.sendAai(params=f'{{action:"setText({sms_code[0]})",query:"TP:more&&R:otpPart1"}}')
@@ -113,12 +89,10 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
         await asyncio.sleep(1)
 
     device.device_status = DeviceStatus.STEP4_3
+
+    # Ввели смс-код
     while True:
-        text_rus = await device.read_screen_text(lang='rus')
-        text_rus = text_rus.get('value', '').lower()
-        text_eng = await device.read_screen_text(lang='eng')
-        text_eng = text_eng.get('value', '').lower()
-        payment_result = await check_bad_result(device, text_rus, text_eng)
+        payment_result = await check_bad_result(device)
         device.device_status = DeviceStatus.STEP4_4
         if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
@@ -131,29 +105,31 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
 async def sms_code_input_abb(device: Device, sms_code) -> str:
     logger = log.bind(step=device.device_status, device_id=device.device_id)
     text = await device.read_screen_text(lang='rus')
-    text = text.get('value', '').lower()
+    text = text.lower()
     while 'введите' not in text:
         if device.timer > Device.SMS_CODE_TIME_LIMIT:
             return 'decline. restart'
         await asyncio.sleep(1)
         text = await device.read_screen_text(lang='rus')
-        text = text.get('value', '').lower()
+        text = text.lower()
     device.device_status = DeviceStatus.STEP4_1
     field_query = '{query:"TP:more&&R:psw_id"}'
+    # Ждем пока увидим поле ввода смс
     await ready_wait(device, field_query)
     device.device_status = DeviceStatus.STEP4_2
+
+    # Вврдим код
     await device.sendAai(params=f'{{action:"setText({sms_code})",query:"TP:more&&R:psw_id"}}')
     device.device_status = DeviceStatus.STEP4_3
     await device.click_on_field('R:btnSubmit')
     device.device_status = DeviceStatus.STEP4_4
     while True:
         text_eng = await device.read_screen_text(lang='eng')
-        text_eng = text_eng.get('value', '').lower()
+        text_eng = text_eng.lower()
         text_rus = await device.read_screen_text(lang='rus')
-        text_rus = text_rus.get('value', '').lower()
+        text_rus = text_rus.lower()
         payment_result = await check_bad_result(device, text_rus, text_eng)
         if payment_result:
-
             return payment_result
         if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')

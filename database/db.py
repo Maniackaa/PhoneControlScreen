@@ -142,6 +142,16 @@ class Device:
     payment: dict = None
 
     @property
+    def is_job_free(self) -> bool:
+        # Проверяет есть ли задача с именем device_id
+        all_task = asyncio.all_tasks(loop=None)
+        for task in all_task:
+            task_name = task.get_name()
+            if task_name == self.device_data.device_id:
+                return False
+        return True
+
+    @property
     def device_data(self):
         data = get_or_create_device_data(self.device_id)
         return data
@@ -183,7 +193,7 @@ class Device:
                 logger.debug(f'Изменен счетчик таймера {self.device_id} на {value}')
 
     @property
-    def device_status(self):
+    def device_status(self) -> DeviceStatus:
         device_data = get_or_create_device_data(self.device_id)
         return device_data.device_status
 
@@ -316,7 +326,7 @@ class Device:
         res = await self.post_url(url, req_data)
         return res
 
-    async def read_screen_text(self, rect='[52,248,1028,2272]', lang='eng', mode='multiline') -> dict:
+    async def read_screen_text(self, rect='[52,248,1028,2272]', lang='eng', mode='multiline') -> str:
         """
         :param lang: ['eng', 'rus']
         :param mode
@@ -326,10 +336,14 @@ class Device:
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
         res = await self.get_url(url)
         self.logger().debug(repr(res))
-        return res
+        return res.get('value', '')
 
     async def ready_response_check(self) -> bool:
-        # Проверяет готовность ища поле D:Top up
+        """
+        Проверяет готовность ища поле D:Top up
+        :return: bool
+        """
+
         json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
         value = json_res.get('value')
         if isinstance(value, dict):
@@ -337,8 +351,11 @@ class Device:
                 return True
         return False
 
-    async def db_ready_check(self) -> bool:
-        # Проверяет готовность по базе
+    async def db_ready_check(self) -> DeviceStatus:
+        """
+        Проверяет готовность по базе
+        :return: Статус из БД
+        """
         return self.device_status
 
     async def restart(self):
