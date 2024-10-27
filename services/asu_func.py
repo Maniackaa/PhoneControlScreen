@@ -84,6 +84,7 @@ async def check_payment(payment_id, count=0) -> dict:
                     return await check_payment(payment_id, count=count + 1)
     except Exception as err:
         logger.error(f'Ошибка: {err}')
+        return {}
 
 
 async def change_payment_status(payment_id: str, status: int):
@@ -144,14 +145,14 @@ async def get_worker_payments(count=0) -> list:
 
 async def main():
     # status = 9
-    # p = await check_payment('6e6f23b4-f049-4b74-ac55-235ee61968d6')
-    # print(p)
-    ps = await get_worker_payments()
-    print(ps)
+    p = await check_payment('b7fc538d-cab3-4c29-823b-c4a927d49590')
+    print(p, type(p))
+    # ps = await get_worker_payments()
+    # print(ps)
     # await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status)
 
 
 if __name__ == '__main__':
-    asyncio.run(get_token())
-    asyncio.run(refresh_token())
+    # asyncio.run(get_token())
+    # asyncio.run(refresh_token())
     asyncio.run(main())

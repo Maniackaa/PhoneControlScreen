@@ -4,6 +4,7 @@ import json
 import time
 
 import keyboard
+import structlog
 
 from config.bot_settings import logger as log, settings
 from database.db import Device, DeviceStatus
@@ -55,6 +56,12 @@ async def key_wait():
         input('Нажмите Enter')
 
 
+async def test(device):
+    device.logger().info('Test')
+    logger2: structlog.stdlib.BoundLogger = structlog.get_logger('new')
+    logger2.info('test 2')
+
+
 async def main():
     asyncio.create_task(key_wait())
     await get_token()
@@ -86,7 +93,9 @@ async def main():
             ready_devices = []
             device_text = ''
             for num, device_id in enumerate(devices_ids, 1):
+
                 device = Device(device_id)
+                # asyncio.create_task(test(device), name=f'{device.device_id} {str(datetime.datetime.now(tz=settings.tz))}')
                 db_status = await device.db_ready_check()
                 if db_status == DeviceStatus.END or db_status == DeviceStatus.READY:
                     # Если скрипт закончен или готов - проверяем экран
@@ -128,8 +137,8 @@ async def main():
         except asyncio.TimeoutError as e:
             log.info(f'Лимит времени одно из телефонов вышел!: {e}')
 
-        except Exception as err:
-            log.error(err)
+        except Exception as e:
+            log.error(str(e))
             await asyncio.sleep(1)
 
 

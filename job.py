@@ -1,11 +1,12 @@
 import asyncio
 import datetime
 import json
+import sys
 import time
 
 from colorama import Back, Style
 
-from config.bot_settings import logger as log
+from config.bot_settings import settings
 from database.db import Device, DeviceStatus
 from exceptions.job_exceptions import DeviceInputAmountException
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
@@ -20,11 +21,12 @@ from steps.step_3 import sms_code_input_kapital, sms_code_input_abb
 
 
 async def make_job(device):
-    logger = device.logger()
+    log = device.logger()
+    logger = log.bind(payment_id=device.payment['id'], started=f'{datetime.datetime.now(tz=settings.tz)}')
     logger.debug(f'make_job: {device}')
-    logger = logger.bind(device_id=device.device_id)
+
     try:
-        device.job_start()
+        device.job_start()  # Изменяем значения в базе
         payment = device.payment
         logger.debug(payment)
         payment_id = payment['id']
@@ -53,7 +55,7 @@ async def make_job(device):
         while not payment_result:
             payment_check = await check_payment(payment_id)
             logger.debug(payment_check)
-            if payment_check.get('status') in [-1, 9]:
+            if payment_check.get('status', '') in [-1, 9]:
                 # Уже отклонен. На исходную.
                 payment_result = 'restart'
                 logger.debug(f'Уже отклонен. На исходную.')
@@ -121,22 +123,19 @@ async def make_job(device):
         await change_payment_status(device.payment['id'], 4)
 
     except Exception as e:
-        log.error(f'Непредвиттденная ошибка: {e}')
+        log.error(f'Непредвиденная ошибка: {e}')
         raise e
 
     finally:
-        await device.click_on_field(field="D:Back to home page")
+        exception_name, exception_value, _ = sys.exc_info()
+        if not isinstance(exception_value, asyncio.exceptions.CancelledError):
+            await device.click_on_field(field="D:Back to home page")
+            is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+            if is_ready:
+                pass
+            else:
+                await device.restart()
         device.start_job_time = None
-        is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
-        if is_ready:
-            pass
-        else:
-            # text_rus = await device.read_screen_text(lang='rus')
-            # text_rus = text_rus.get('value', '').lower()
-            # text_eng = await device.read_screen_text(lang='eng')
-            # text_eng = text_eng.get('value', '').lower()
-            # bad = await check_bad_result(device, text_rus, text_eng)
-            await device.restart()
         device.device_status = DeviceStatus.END
         logger.info('Телефон готов после скрипта')
 

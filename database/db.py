@@ -9,6 +9,7 @@ from enum import Enum
 import aiohttp
 import requests
 import sqlalchemy
+import structlog
 from sqlalchemy import create_engine, ForeignKey, String, DateTime, \
     Integer, select, delete, Text, BLOB
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -19,8 +20,7 @@ from sqlalchemy_utils import database_exists, create_database
 
 
 # db_url = f"postgresql+psycopg2://{conf.db.db_user}:{conf.db.db_password}@{conf.db.db_host}:{conf.db.db_port}/{conf.db.database}"
-from config.bot_settings import BASE_DIR, logger, settings
-
+from config.bot_settings import BASE_DIR, settings, logger
 
 db_path = BASE_DIR / 'base.sqlite'
 db_url = f"sqlite:///{db_path}"
@@ -248,7 +248,17 @@ class Device:
         return f'http://localhost:8090/TotalControl/v2/devices/{self.device_id}'
 
     def logger(self):
-        return logger.bind(device_id=self.device_id)
+
+
+        name = f'{self.device_id}'
+        # processors = structlog.get_config()["processors"]
+        # print(processors)
+        # new_processors = processors[:-1] + [add_phone_name] + [processors[-1]]
+
+        # structlog.configure(processors=new_processors)
+        logger: structlog.stdlib.BoundLogger = structlog.get_logger(name, phone_name=f'{self.device_data.device_name}')
+        # logger.info('Присвоен логгер!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        return logger
 
     async def get_url(self, url, params=None, headers=None) -> dict:
         await self.check_timer()
@@ -359,6 +369,7 @@ class Device:
         return self.device_status
 
     async def restart(self):
+        self.logger().debug('Выполняю перезапуск')
         self.device_status = DeviceStatus.RESTART
         url = f'{self.device_url}/apps/com.m10?state=restart&token={TOKEN}'
         res = await self.post_url(url)

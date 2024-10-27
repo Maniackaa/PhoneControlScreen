@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import time
 
-from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
 from services.func import check_field, check_bad_result
 
@@ -16,10 +15,12 @@ async def ready_wait(device, field_query) -> bool:
     :param field_query:
     :return:
     """
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     is_ready = await check_field(device, field_query)
     while not is_ready:
         await device.alt_tab()
-        log.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
+        logger.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
         await asyncio.sleep(2)
         is_ready = await check_field(device, field_query)
         await asyncio.sleep(1)
@@ -31,7 +32,8 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
     Ввод смс кода банка Капитал
     1. Ждем поле ввода кода 'R:otpPart1'. Кликаем на 100, 940
     """
-    logger = log.bind(step=device.device_status, device_id=device.device_id)
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     text_eng = await device.read_screen_text()
     while 'enter dynamic' not in text_eng.lower():
         logger.debug(f'Ищем Enter dynamic')
@@ -92,7 +94,8 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
 
     # Ввели смс-код
     while True:
-        payment_result = await check_bad_result(device)
+        text_eng = await device.read_screen_text()
+        payment_result = await check_bad_result(device, text_eng=text_eng)
         device.device_status = DeviceStatus.STEP4_4
         if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
@@ -103,7 +106,8 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
 
 
 async def sms_code_input_abb(device: Device, sms_code) -> str:
-    logger = log.bind(step=device.device_status, device_id=device.device_id)
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     text = await device.read_screen_text(lang='rus')
     text = text.lower()
     while 'введите' not in text:
@@ -126,9 +130,7 @@ async def sms_code_input_abb(device: Device, sms_code) -> str:
     while True:
         text_eng = await device.read_screen_text(lang='eng')
         text_eng = text_eng.lower()
-        text_rus = await device.read_screen_text(lang='rus')
-        text_rus = text_rus.lower()
-        payment_result = await check_bad_result(device, text_rus, text_eng)
+        payment_result = await check_bad_result(device, text_eng=text_eng)
         if payment_result:
             return payment_result
         if 'on the way' in text_eng.lower():

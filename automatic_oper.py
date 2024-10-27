@@ -67,7 +67,7 @@ async def main():
                             break
                         payment_check = await check_payment(payment_id)
                         logger.debug(payment_check)
-                        sms = payment_check.get('sms_code')
+                        sms = payment_check.get('sms_code', '')
                         if sms:
                             logger.info('смс код получен')
                             break

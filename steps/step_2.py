@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import time
 
-from config.bot_settings import logger as log
 from database.db import Device, DeviceStatus
 from services.func import wait_new_field, check_field
 from services.total_api import device_list
@@ -17,7 +16,8 @@ async def card_data_input(device: Device, card, exp, cvv):
 
 
     """
-    logger = log.bind(step=device.device_status, device=device)
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     logger.debug('Начат ввод данных карты:')
     is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
     while not is_ready:

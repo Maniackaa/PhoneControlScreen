@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import time
 
-from config.bot_settings import logger as log
+
 from database.db import Device, DeviceStatus
 from exceptions.job_exceptions import DeviceInputAmountException
 from services.asu_func import change_payment_status
@@ -18,8 +18,8 @@ async def amount_input(device: Device, amount: str):
         3. Клик - ввод суммы.
         4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
     """
-
-    logger = log.bind(step=device.device_status, device_id=device.device_id)
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     logger.info(f'Начинается ввод суммы {amount} azn')
     is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
     while not is_ready:
@@ -51,7 +51,8 @@ async def amount_input_step(device: Device, amount: str) -> bool:
     5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
     """
     start = time.perf_counter()
-    logger = log.bind(step=device.device_status, device_id=device.device_id)
+    log = device.logger()
+    logger = log.bind(step=device.device_status)
     await amount_input(device, amount)
     # Нажатие продолжить
     res = await device.sendAai(
@@ -74,9 +75,10 @@ async def amount_input_step(device: Device, amount: str) -> bool:
         if is_ready:
             device.device_status = DeviceStatus.STEP2_0
             end = time.perf_counter()
-            logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({end - start} c.)')
+            logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({round(end - start, 1)} c.)')
             break
         await asyncio.sleep(1)
+    return True
 
 
 async def main():

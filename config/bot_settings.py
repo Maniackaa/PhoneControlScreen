@@ -1,10 +1,12 @@
 import logging
 from functools import lru_cache
 from pathlib import Path
+from pprint import pprint
 
 import pytz as pytz
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from structlog.stdlib import AsyncBoundLogger
 from structlog.typing import WrappedLogger, EventDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,6 +31,7 @@ class Settings(BaseSettings):
     JOB_TIME_LIMIT: int
     SCREEN_TIME_LIMIT: int
     LOG_LEVEL: str = 'DEBUG'
+    PHONES: list
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 
@@ -44,63 +47,165 @@ def get_settings():
 
 settings = get_settings()
 
+import logging.config
+import time
 
-LOG_TO_FILE = settings.LOG_TO_FILE
+import structlog
+
+timestamper = structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False)
+pre_chain = [
+    structlog.stdlib.add_log_level,
+    structlog.stdlib.ExtraAdder(),
+    timestamper,
+]
 
 
-def get_factory():
-    log_file_dir = BASE_DIR / 'logs' / 'bot'
-    print(f'LOG_TO_FILE: {LOG_TO_FILE}')
-    if not LOG_TO_FILE:
-        return structlog.PrintLoggerFactory()
-    return structlog.WriteLoggerFactory(file=log_file_dir.with_suffix(".log").open("wt"))
+def extract_from_record(_, __, event_dict):
+    """
+    Extract thread and process names and add them to the event dict.
+    """
+    record = event_dict["_record"]
+    # event_dict["thread_name"] = record.threadName
+    # event_dict["process_name"] = record.processName
+    return event_dict
 
+device_ids = ['device@1864548471', 'device@22222222222']
+LOG_PATH = BASE_DIR / 'logs'
 
-def get_my_loggers():
-    class LogJump:
-        def __init__(
-            self,
-            full_path: bool = False,
-        ) -> None:
-            self.full_path = full_path
+handlers = {
+    "default": {
+        "level": "INFO",
+        "class": "logging.StreamHandler",
+        "formatter": "colored",
+    },
+    "file": {
+        "level": "DEBUG",
+        "class": "logging.handlers.WatchedFileHandler",
+        "filename": LOG_PATH / "file.log",
+        "formatter": "colored",
+    },
+}
 
-        def __call__(
-            self, logger: WrappedLogger, name: str, event_dict: EventDict
-        ) -> EventDict:
-            if self.full_path:
-                file_part = "\n" + event_dict.pop("pathname")
-            else:
-                file_part = event_dict.pop("filename")
-            event_dict["location"] = f'"{file_part}:{event_dict.pop("lineno")}"'
+loggers = {"": {"handlers": ["default", "file"],
+                "level": "DEBUG",
+                "propagate": True,
+                },
+           }
 
-            return event_dict
+for device_id in device_ids:
+    handlers[device_id] = {
+        "level": "DEBUG",
+        "class": "logging.handlers.WatchedFileHandler",
+        "filename": LOG_PATH / f"{device_id}.log",
+        "formatter": "colored",
+    }
 
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.set_exc_info,
-            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
-            structlog.processors.CallsiteParameterAdder(
-                [
-                    # add either pathname or filename and then set full_path to True or False in LogJump below
-                    # structlog.processors.CallsiteParameter.PATHNAME,
-                    structlog.processors.CallsiteParameter.FILENAME,
-                    structlog.processors.CallsiteParameter.LINENO,
+    loggers[device_id] = {"handlers": [f"{device_id}"],
+                          "level": "DEBUG",
+                          "propagate": True,
+                          }
+
+logging.config.dictConfig(
+    {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "plain": {
+                "()": structlog.stdlib.ProcessorFormatter,
+                "processors": [
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.dev.ConsoleRenderer(colors=False),
                 ],
-            ),
-            LogJump(full_path=False),
-            structlog.dev.ConsoleRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.LOG_LEVEL)),
-        context_class=dict,
-        # logger_factory=structlog.PrintLoggerFactory(),
-        logger_factory=get_factory(),
-        cache_logger_on_first_use=False,
-    )
-    return structlog.stdlib.get_logger()
+                "foreign_pre_chain": pre_chain,
+            },
+            "colored": {
+                "()": structlog.stdlib.ProcessorFormatter,
+                "processors": [
+                    extract_from_record,
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.dev.ConsoleRenderer(colors=True),
+                ],
+                "foreign_pre_chain": pre_chain,
+            },
+        },
+        "handlers": handlers,
+        "loggers": loggers,
+
+    }
+)
 
 
-logger = get_my_loggers()
-logger.info(str(settings))
+def add_phone_name(a, b, event_dict):
+    if 'device@' in event_dict.get('logger', ''):
+        phone_name = f"-{event_dict.get('phone_name'):2}-"
+        event_dict['event'] = f"{phone_name} {event_dict['event']}"
+    return event_dict
+
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        # structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        # structlog.processors.TimeStamper(fmt="iso"),
+        # If the "stack_info" key in the event dict is true, remove it and
+        # render the current stack trace in the "stack" key.
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        # If some value is in bytes, decode it to a Unicode str.
+        structlog.processors.UnicodeDecoder(),
+        # Add callsite parameters.
+        structlog.processors.CallsiteParameterAdder(
+            {
+                structlog.processors.CallsiteParameter.FILENAME,
+                structlog.processors.CallsiteParameter.FUNC_NAME,
+                structlog.processors.CallsiteParameter.LINENO,
+                # structlog.processors.CallsiteParameter.PATHNAME ,
+                # structlog.processors.CallsiteParameter.MODULE,
+                # structlog.processors.CallsiteParameter.PROCESS,
+                # structlog.processors.CallsiteParameter.PROCESS_NAME,
+                # structlog.processors.CallsiteParameter.THREAD,
+                # structlog.processors.CallsiteParameter.THREAD_NAME
+            }
+        ),
+        # structlog.processors.JSONRenderer(),
+        structlog.stdlib.ExtraAdder(),
+        add_phone_name,
+        structlog.dev.ConsoleRenderer(colors=True),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    # wrapper_class=AsyncBoundLogger,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger('main')
+logger.info('OK')
+
+# pprint({
+#         "version": 1,
+#         "disable_existing_loggers": False,
+#         "formatters": {
+#             "plain": {
+#                 "()": structlog.stdlib.ProcessorFormatter,
+#                 "processors": [
+#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+#                     structlog.dev.ConsoleRenderer(colors=False),
+#                 ],
+#                 "foreign_pre_chain": pre_chain,
+#             },
+#             "colored": {
+#                 "()": structlog.stdlib.ProcessorFormatter,
+#                 "processors": [
+#                     extract_from_record,
+#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+#                     structlog.dev.ConsoleRenderer(colors=True),
+#                 ],
+#                 "foreign_pre_chain": pre_chain,
+#             },
+#         },
+#         "handlers": handlers,
+#         "loggers": loggers,
+#
+#     })
