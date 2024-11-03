@@ -2,9 +2,11 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from pprint import pprint
+from typing import List
 
 import pytz as pytz
 import structlog
+import logging.config
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from structlog.stdlib import AsyncBoundLogger
 from structlog.typing import WrappedLogger, EventDict
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     JOB_TIME_LIMIT: int
     SCREEN_TIME_LIMIT: int
     LOG_LEVEL: str = 'DEBUG'
-    PHONES: list
+    PHONES: List[str] = []
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env")
 
@@ -46,11 +48,6 @@ def get_settings():
 
 
 settings = get_settings()
-
-import logging.config
-import time
-
-import structlog
 
 timestamper = structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False)
 pre_chain = [
@@ -69,38 +66,47 @@ def extract_from_record(_, __, event_dict):
     # event_dict["process_name"] = record.processName
     return event_dict
 
-device_ids = ['device@1864548471', 'device@22222222222']
+
+device_ids = settings.PHONES
+print(device_ids)
 LOG_PATH = BASE_DIR / 'logs'
 
 handlers = {
-    "default": {
+    "console": {
         "level": "INFO",
         "class": "logging.StreamHandler",
         "formatter": "colored",
     },
     "file": {
         "level": "DEBUG",
-        "class": "logging.handlers.WatchedFileHandler",
-        "filename": LOG_PATH / "file.log",
+        # "class": "logging.handlers.WatchedFileHandler",
+        "class": "logging.handlers.TimedRotatingFileHandler",
+        "filename": LOG_PATH / "script.log",
         "formatter": "colored",
+        'when': 'h',
+        'interval': 1,
+        'backupCount': 0
     },
 }
 
-loggers = {"": {"handlers": ["default", "file"],
-                "level": "DEBUG",
-                "propagate": True,
-                },
+loggers = {"main": {"handlers": ["console", "file"],
+                    "level": "DEBUG",
+                    "propagate": True,
+                    },
            }
 
 for device_id in device_ids:
     handlers[device_id] = {
         "level": "DEBUG",
-        "class": "logging.handlers.WatchedFileHandler",
+        "class": "logging.handlers.TimedRotatingFileHandler",
         "filename": LOG_PATH / f"{device_id}.log",
+        'when': 'h',
+        'interval': 1,
+        'backupCount': 0,
         "formatter": "colored",
     }
 
-    loggers[device_id] = {"handlers": [f"{device_id}"],
+    loggers[device_id] = {"handlers": ["console", f"{device_id}"],
                           "level": "DEBUG",
                           "propagate": True,
                           }
@@ -136,9 +142,10 @@ logging.config.dictConfig(
 
 
 def add_phone_name(a, b, event_dict):
-    if 'device@' in event_dict.get('logger', ''):
-        phone_name = f"-{event_dict.get('phone_name'):2}-"
-        event_dict['event'] = f"{phone_name} {event_dict['event']}"
+
+    if 'phone_name' in event_dict.keys():
+        phone_label = f"-{event_dict.get('phone_name'):2}-"
+        event_dict['event'] = f"{phone_label} {event_dict['event']}"
     return event_dict
 
 
@@ -154,7 +161,8 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         # If some value is in bytes, decode it to a Unicode str.
-        structlog.processors.UnicodeDecoder(),
+        structlog.processors.UnicodeDecoder(encoding='utf-8'),
+        # structlog.processors.UnicodeEncoder(encoding='utf-8'),
         # Add callsite parameters.
         structlog.processors.CallsiteParameterAdder(
             {
@@ -181,31 +189,31 @@ structlog.configure(
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger('main')
-logger.info('OK')
+logger.info('Логгер OK')
 
-# pprint({
-#         "version": 1,
-#         "disable_existing_loggers": False,
-#         "formatters": {
-#             "plain": {
-#                 "()": structlog.stdlib.ProcessorFormatter,
-#                 "processors": [
-#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-#                     structlog.dev.ConsoleRenderer(colors=False),
-#                 ],
-#                 "foreign_pre_chain": pre_chain,
-#             },
-#             "colored": {
-#                 "()": structlog.stdlib.ProcessorFormatter,
-#                 "processors": [
-#                     extract_from_record,
-#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-#                     structlog.dev.ConsoleRenderer(colors=True),
-#                 ],
-#                 "foreign_pre_chain": pre_chain,
-#             },
-#         },
-#         "handlers": handlers,
-#         "loggers": loggers,
-#
-#     })
+pprint({
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "plain": {
+                "()": structlog.stdlib.ProcessorFormatter,
+                "processors": [
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.dev.ConsoleRenderer(colors=False),
+                ],
+                "foreign_pre_chain": pre_chain,
+            },
+            "colored": {
+                "()": structlog.stdlib.ProcessorFormatter,
+                "processors": [
+                    extract_from_record,
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.dev.ConsoleRenderer(colors=True),
+                ],
+                "foreign_pre_chain": pre_chain,
+            },
+        },
+        "handlers": handlers,
+        "loggers": loggers,
+
+    })

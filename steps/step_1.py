@@ -10,7 +10,7 @@ from services.func import wait_new_field, check_field
 from services.total_api import device_list
 
 
-async def amount_input(device: Device, amount: str):
+async def amount_input(device: Device, amount: str, log=None):
     """
         Ввод суммы
         1. Жмем кнопку Top up 'TP:more&&D:Top up'
@@ -18,12 +18,14 @@ async def amount_input(device: Device, amount: str):
         3. Клик - ввод суммы.
         4. Нажаьте продолжить 'TP:findText,Continue'. Пауза 5 c
     """
-    log = device.logger()
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     logger.info(f'Начинается ввод суммы {amount} azn')
-    is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+    # is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+    is_ready = await device.ready_response_check()
     while not is_ready:
-        is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+        is_ready = await device.ready_response_check()
         await asyncio.sleep(1)
 
     res = await device.sendAai(
@@ -41,7 +43,7 @@ async def amount_input(device: Device, amount: str):
     device.device_status = DeviceStatus.STEP1_1
 
 
-async def amount_input_step(device: Device, amount: str) -> bool:
+async def amount_input_step(device: Device, amount: str, log=None) -> bool:
     """
     Ввод суммы
     1. Жмем кнопку Top up 'TP:more&&D:Top up'
@@ -51,7 +53,8 @@ async def amount_input_step(device: Device, amount: str) -> bool:
     5. Ждем экран карты 'TP:more&&R:cardPan'. Кликаем пока ждем в точку 200, 700
     """
     start = time.perf_counter()
-    log = device.logger()
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     await amount_input(device, amount)
     # Нажатие продолжить
@@ -86,7 +89,7 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        await amount_input(device, '10')
+        await amount_input_step(device, '10')
         end = time.perf_counter()
         print(end - start)
 

@@ -18,7 +18,7 @@ async def main():
                 # print(device.device_id, repr(res.get('value')))
         print('---------------------------------')
         print()
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(0.1)
 
 if __name__ == '__main__':
     asyncio.run(main())

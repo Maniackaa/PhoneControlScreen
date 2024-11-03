@@ -11,13 +11,9 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        # res = await device.input(**{'x': '200', 'y': '1000'})
-        # res = await device.click_on_field('TP:more&&D:Пополнить')
-        # await device.sendAai(params=f'{{action:"setText({2})",query:"TP:more&&R:otpPart1"}}')
-        res = await device.click(12, 39)
+        await device.alt_tab()
         end = time.perf_counter()
         print(end - start)
-        # print(res)
 
 
 if __name__ == '__main__':

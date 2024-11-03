@@ -4,10 +4,11 @@ import time
 
 import aiohttp
 import requests
+import structlog
 import winsound
 from aiohttp import ClientTimeout
 
-from config.bot_settings import logger, settings, BASE_DIR
+from config.bot_settings import settings, BASE_DIR, logger
 
 data = {
     'refresh': '',
@@ -82,15 +83,24 @@ async def check_payment(payment_id, count=0) -> dict:
                     await asyncio.sleep(count)
                     await refresh_token()
                     return await check_payment(payment_id, count=count + 1)
+                else:
+                    logger.error(f'Плохой статус: {response.status} {await response.text()}')
     except Exception as err:
         logger.error(f'Ошибка: {err}')
         return {}
 
 
-async def change_payment_status(payment_id: str, status: int):
-    """Смена статуса платежа"""
+async def change_payment_status(payment_id: str, status: int, count=1, logger=structlog.get_logger('main')):
+    """Смена статуса платежа
+    Заявка создана - 0.
+    Переданы данные карты - 3
+    Назначена оператору - 4
+    Бот взял в работу - 8
+    Бот ввел данные карты в М10 - 5
+    Мерч передал смс - 6.
+    """
     try:
-        logger.debug(f'Смена статуса платежа {payment_id} на: {status}')
+        logger.debug(f'Смена статуса платежа № {count} {payment_id} на: {status}')
         url = f'{settings.ASU_HOST}/api/v1/payment_status/{payment_id}/'
         headers = {
             'Content-Type': 'application/json',
@@ -103,14 +113,22 @@ async def change_payment_status(payment_id: str, status: int):
             async with session.put(url, headers=headers, json=json_data, ssl=False) as response:
                 if response.status == 200:
                     logger.debug(f'Статус {payment_id} изменен на {status}')
+                    result = await response.json()
+                    logger.debug(result)
+                    return result
+                elif response.status == 400:
+                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН!: {await response.text()}')
+                    return
                 else:
-                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! {response.status}')
-                logger.debug(f'response.status: {response.status}')
-                result = await response.json()
-                logger.debug(result)
-        return result
+                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! response: {response.status} {await response.text()}')
+                    if count >= 3:
+                        logger.error(f'Ошибка при изменении статуса после 3 попыток {payment_id}')
+                        return {'status': 'error check_payment'}
+                    await asyncio.sleep(count)
+                    logger.debug(f'Еще попытка сменить статус {payment_id}')
+                    return await change_payment_status(payment_id, status, count=count+1, logger=logger)
     except Exception as err:
-        logger.error(f'Ошибка при смене статуса платежа: {err}')
+        logger.error(f'Ошибка при смене статуса {payment_id}')
         # raise err
 
 
@@ -128,7 +146,7 @@ async def get_worker_payments(count=0) -> list:
                 if response.status == 200:
                     logger.debug(f'{response.status}. {round(time.perf_counter() - start, 2)} c.')
                     result = await response.json()
-                    return result.get('results')
+                    return result.get('results', [])
                 elif response.status == 401:
                     if count > 3:
                         logger.warning('Ошибка при проверке payments 3 раза')
@@ -137,19 +155,21 @@ async def get_worker_payments(count=0) -> list:
                     await asyncio.sleep(count)
                     await refresh_token()
                     return await get_worker_payments(count=count + 1)
+        return []
     except Exception as err:
-        logger.warning(f'Ошибка при проверке payments: {err}. {round(time.perf_counter() - start, 2)} c.')
+        logger.warning(f'Ошибка при проверке payments. {round(time.perf_counter() - start, 2)} c.')
         winsound.PlaySound((BASE_DIR / 'media' / 'sound' / 'wrong.wav').as_posix(), winsound.SND_FILENAME)
         return []
 
 
 async def main():
-    # status = 9
-    p = await check_payment('b7fc538d-cab3-4c29-823b-c4a927d49590')
-    print(p, type(p))
+    await get_token()
+    status = 9
+    # p = await check_payment('b7fc538d-cab3-4c29-823b-c4a927d49590')
+    # print(p, type(p))
     # ps = await get_worker_payments()
     # print(ps)
-    # await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status)
+    await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status, logger=logger)
 
 
 if __name__ == '__main__':

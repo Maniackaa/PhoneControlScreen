@@ -8,14 +8,12 @@ from services.func import check_field, check_bad_result
 from services.total_api import device_list
 
 
-async def ready_wait(device, field_query) -> bool:
+async def ready_wait(device, field_query, log=None) -> bool:
     """
     Ищет поле field_query. Пока не найдет альттабит
-    :param device:
-    :param field_query:
-    :return:
     """
-    log = device.logger()
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     is_ready = await check_field(device, field_query)
     while not is_ready:
@@ -27,16 +25,20 @@ async def ready_wait(device, field_query) -> bool:
     return True
 
 
-async def sms_code_input_kapital(device: Device, sms_code) -> str:
+async def sms_code_input_kapital(device: Device, sms_code, log=None) -> str:
     """
     Ввод смс кода банка Капитал
     1. Ждем поле ввода кода 'R:otpPart1'. Кликаем на 100, 940
     """
-    log = device.logger()
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     text_eng = await device.read_screen_text()
+    print(text_eng)
     while 'enter dynamic' not in text_eng.lower():
         logger.debug(f'Ищем Enter dynamic')
+        text_eng = await device.read_screen_text()
+        print(text_eng)
         await asyncio.sleep(1)
         payment_result = await check_bad_result(device)
         if payment_result:
@@ -70,22 +72,27 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
         await asyncio.sleep(0.5)
     else:
         logger.debug('Не найдены поля для цифр')
-        await device.click(150, 920)
+        x1 = int(12 * device.device_data.width / 100)
+        x2 = int(37 * device.device_data.width / 100)
+        x3 = int(62 * device.device_data.width / 100)
+        x4 = int(88 * device.device_data.width / 100)
+        y = int(39 * device.device_data.height / 100)
+        await device.click(x1, y)
         await asyncio.sleep(1)
         await device.text(text=f'{sms_code[0]}')
         await asyncio.sleep(0.5)
 
-        await device.click(400, 920)
+        await device.click(x2, y)
         await asyncio.sleep(1)
         await device.text(text=f'{sms_code[1]}')
         await asyncio.sleep(0.5)
 
-        await device.click(680, 920)
+        await device.click(x3, y)
         await asyncio.sleep(1)
         await device.text(text=f'{sms_code[2]}')
         await asyncio.sleep(0.5)
 
-        await device.click(950, 920)
+        await device.click(x4, y)
         await asyncio.sleep(1)
         await device.text(text=f'{sms_code[3]}')
         await asyncio.sleep(1)
@@ -105,8 +112,9 @@ async def sms_code_input_kapital(device: Device, sms_code) -> str:
         await asyncio.sleep(2)
 
 
-async def sms_code_input_abb(device: Device, sms_code) -> str:
-    log = device.logger()
+async def sms_code_input_abb(device: Device, sms_code, log=None) -> str:
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     text = await device.read_screen_text(lang='rus')
     text = text.lower()

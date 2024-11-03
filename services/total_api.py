@@ -4,10 +4,10 @@ import dataclasses
 import json
 
 import requests
+import structlog
 
 from config.bot_settings import settings, logger
 from database.db import TOKEN, Device
-
 basic_url = 'http://localhost:8090/TotalControl/v2/devices?token=' + TOKEN
 
 

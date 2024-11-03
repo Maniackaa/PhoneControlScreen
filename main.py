@@ -29,6 +29,9 @@ async def prepare(device_id):
     device.device_data.set('last_screen_change', datetime.datetime.now())
     info = await device.info
     device.device_data.set('device_name', info['name'])
+    device.device_data.set('height', info['height'])
+    device.device_data.set('width', info['width'])
+    device.device_data.set('manufacturer', info['manufacturer'])
 
 
 def testprint1():
@@ -93,7 +96,6 @@ async def main():
             ready_devices = []
             device_text = ''
             for num, device_id in enumerate(devices_ids, 1):
-
                 device = Device(device_id)
                 # asyncio.create_task(test(device), name=f'{device.device_id} {str(datetime.datetime.now(tz=settings.tz))}')
                 db_status = await device.db_ready_check()
@@ -116,7 +118,7 @@ async def main():
                     timer_text = ''
                     if device.STEP2_END:
                         timer_text = f'ввод {(datetime.datetime.now() - device.STEP2_END).total_seconds()} сек. назад'
-                    device_text += f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.YELLOW}Занят  {Style.RESET_ALL} ({device.device_status.name} {device.device_status.value} {timer_text}timer: {device.timer})\n'
+                    device_text += f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.YELLOW}Занят  {Style.RESET_ALL} ({device.device_status.name} {device.device_status.value} {timer_text}timer: {device.timer}/{settings.JOB_TIME_LIMIT})\n'
             print(device_text)
 
             payments = await get_worker_payments()
@@ -128,24 +130,24 @@ async def main():
                             device.payment = payment
                             device.device_status = DeviceStatus.STEP0
                             device.JOB_START = datetime.datetime.now()
-                            asyncio.create_task(make_job(device), name=f'{device.device_id}')
-                            await change_payment_status(payment_id=payment['id'], status=8)
-                            log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
-                            break
+                            result = await change_payment_status(payment_id=payment['id'], status=8)
+                            if result:
+                                asyncio.create_task(make_job(device), name=f'{device.device_id}')
+                                log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
+                                break
 
             await asyncio.sleep(3)
         except asyncio.TimeoutError as e:
             log.info(f'Лимит времени одно из телефонов вышел!: {e}')
-
         except Exception as e:
-            log.error(str(e))
+            log.error(e)
             await asyncio.sleep(1)
 
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
-    except Exception as err:
-        log.error(err)
+    except Exception as error:
+        print(error)
         input('Enter')
 

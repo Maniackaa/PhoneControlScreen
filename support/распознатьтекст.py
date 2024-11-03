@@ -12,13 +12,14 @@ async def main():
     for device in devices:
         if device:
             device = Device(device)
+            print(await device.info)
             start = time.perf_counter()
-            res = await device.read_screen_text(rect='[52,248,1028,2272]', lang='rus')
+            res = await device.read_screen_text(lang='rus')
             print(res)
 
             end = time.perf_counter()
             print(end - start)
-            res = await device.read_screen_text(rect='[52,248,1028,2272]', lang='eng')
+            res = await device.read_screen_text(lang='eng')
             print(res)
 
             print(end - start)
@@ -27,3 +28,9 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+# XIAOMI
+#H 2400 W 1080
+
+# SAMSUNG
+#H 1600 W 720

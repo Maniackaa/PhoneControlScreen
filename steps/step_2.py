@@ -7,7 +7,7 @@ from services.func import wait_new_field, check_field
 from services.total_api import device_list
 
 
-async def card_data_input(device: Device, card, exp, cvv):
+async def card_data_input(device: Device, card, exp, cvv, log=None):
     """
     Ввод данных карты
     1. Жмем активации поля T:Заполните данные карты. Обновляем пока нет
@@ -16,15 +16,16 @@ async def card_data_input(device: Device, card, exp, cvv):
 
 
     """
-    log = device.logger()
+    if not log:
+        log = device.logger()
     logger = log.bind(step=device.device_status)
     logger.debug('Начат ввод данных карты:')
     is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
+    print(is_ready)
     while not is_ready:
         await device.alt_tab()
         is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
         await asyncio.sleep(1)
-
     card_f = f'{card[:4]} {card[4:8]} {card[8:12]} {card[12:]}'
     await device.sendAai(f'{{action: "setText({card_f})", query: "BP:editable&&IX:0"}}')
     await device.sendAai(f'{{action: "setText({exp})", query: "BP:editable&&IX:1"}}')
@@ -37,7 +38,7 @@ async def card_data_input(device: Device, card, exp, cvv):
         logger.info('Ввод данных карты завершен. Кнопка нажата')
         device.device_status = DeviceStatus.STEP2_1
     else:
-        logger.error(f'Не нажалась кнопка Оплатить!!! Пробую еще раз')
+        logger.error(f'Не нажалась кнопка Оплатить на вводе карты!!! Пробую еще раз')
         await asyncio.sleep(3)
         await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
 
@@ -47,7 +48,7 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        await card_data_input(device, '4169738848626770', '06/27', '123')
+        await card_data_input(device, '4169738848626770', '06/27', '555')
         end = time.perf_counter()
         print(end - start)
 

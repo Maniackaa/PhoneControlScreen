@@ -98,6 +98,9 @@ class DeviceData(Base):
     id: Mapped[int] = mapped_column(primary_key=True,
                                     autoincrement=True)
     device_id: Mapped[str] = mapped_column(String(50))
+    width: Mapped[int] = mapped_column(Integer(), default=0)
+    height: Mapped[int] = mapped_column(Integer(), default=0)
+    manufacturer: Mapped[str] = mapped_column(String(50), nullable=True)
     device_name: Mapped[str] = mapped_column(String(50), nullable=True)
     device_status: Mapped[Enum] = mapped_column(sqlalchemy.Enum(
         DeviceStatus,     name="post_status_type",
@@ -152,7 +155,7 @@ class Device:
         return True
 
     @property
-    def device_data(self):
+    def device_data(self) -> DeviceData:
         data = get_or_create_device_data(self.device_id)
         return data
 
@@ -248,16 +251,13 @@ class Device:
         return f'http://localhost:8090/TotalControl/v2/devices/{self.device_id}'
 
     def logger(self):
-
-
-        name = f'{self.device_id}'
+        name = f'{self.device_id.split("@")[1]}'
         # processors = structlog.get_config()["processors"]
         # print(processors)
         # new_processors = processors[:-1] + [add_phone_name] + [processors[-1]]
-
         # structlog.configure(processors=new_processors)
         logger: structlog.stdlib.BoundLogger = structlog.get_logger(name, phone_name=f'{self.device_data.device_name}')
-        # logger.info('Присвоен логгер!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        # logger.info(f'Для {self} присвоен логгер {name}')
         return logger
 
     async def get_url(self, url, params=None, headers=None) -> dict:
@@ -336,16 +336,28 @@ class Device:
         res = await self.post_url(url, req_data)
         return res
 
-    async def read_screen_text(self, rect='[52,248,1028,2272]', lang='eng', mode='multiline') -> str:
+    async def read_screen_text(self, rect='[1,10,99,90]', lang='eng', mode='multiline') -> str:
         """
         :param lang: ['eng', 'rus']
+        :param rect: [x1,y1,x2,y2]
         :param mode
         : ['multiline', 'singleline']
         :return: {'status': True, 'value': "respose text\n"}
         """
-        url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={rect}&lang={lang}&mode={mode}'
+
+        max_x = self.device_data.width
+        max_y = self.device_data.height
+        rect_list = json.loads(rect)
+        rect = [
+            int(rect_list[0] * max_x / 100),
+            int(rect_list[1] * max_y / 100),
+            int(rect_list[2] * max_x / 100),
+            int(rect_list[3] * max_y / 100),
+        ]
+        result_rect = json.dumps(rect).replace(' ', '')
+        url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={result_rect}&lang={lang}&mode={mode}'
         res = await self.get_url(url)
-        self.logger().debug(repr(res))
+        self.logger().debug(json.dumps(res))
         return res.get('value', '')
 
     async def ready_response_check(self) -> bool:
@@ -368,6 +380,23 @@ class Device:
         """
         return self.device_status
 
+    @staticmethod
+    def get_center_bound(bound: list[int, int, int, int]) -> list[int, int]:
+        return [int((bound[0] + bound[2]) / 2), int((bound[1] + bound[3]) / 2)]
+
+    async def find_bound_from_query(self, query="TP:more&&D:7"):
+        res = await self.sendAai(params=f'{{action:["getBounds"],query:"{query}"}}')
+        print(res)
+        result = res.get('value')
+        if isinstance(result, dict):
+            bounds = result.get('bounds')
+            print(bounds)
+            bound = bounds[0]
+            print('bound:', bound, type(bound), len(bound))
+            center_bound = self.get_center_bound(bound)
+            print(center_bound)
+            return center_bound
+
     async def restart(self):
         self.logger().debug('Выполняю перезапуск')
         self.device_status = DeviceStatus.RESTART
@@ -385,8 +414,13 @@ class Device:
             self.logger().debug('Ждем панель')
             await asyncio.sleep(1)
         await asyncio.sleep(1)
-        for i in '7777':
-            await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
+        coord_7 = await self.find_bound_from_query("TP:more&&D:7")
+        # for i in '7777':
+        #     await self.sendAai(params=f'{{action:"click",query:"TP:more&&D:{i}"}}')
+        for i in range(4):
+            await self.click(coord_7[0], coord_7[1])
+            await asyncio.sleep(0.1)
+
         self.device_status = DeviceStatus.END
 
     async def alt_tab(self):

@@ -82,7 +82,6 @@ async def check_bad_result(device: Device, text_rus=None, text_eng=None) -> str:
     return payment_result
 
 
-
 async def wait_new_field(device, params, limit=60):
     # Ждем поле
     is_ready = False
@@ -95,6 +94,9 @@ async def wait_new_field(device, params, limit=60):
         await asyncio.sleep(2)
         is_ready = await check_field(device, params)
     return True
+
+
+
 
 
 async def get_card_data():

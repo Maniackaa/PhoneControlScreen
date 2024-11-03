@@ -6,7 +6,7 @@ import time
 
 from colorama import Back, Style
 
-from config.bot_settings import settings
+from config.bot_settings import settings, logger
 from database.db import Device, DeviceStatus
 from exceptions.job_exceptions import DeviceInputAmountException
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
@@ -39,11 +39,13 @@ async def make_job(device):
         cvv = card_data['cvv']
 
         script_start = time.perf_counter()
-        await amount_input_step(device, amount)
+        # Ввод суммы
+        await amount_input_step(device, amount, logger)
+        # Ввод карты
         await card_data_input(device, card,  exp, cvv)
         device.STEP2_END = datetime.datetime.now()  # Время ввода данных карты
 
-        await change_payment_status(payment_id, 5)
+        await change_payment_status(payment_id, 5, logger=logger)
         device.device_status = DeviceStatus.STEP3_0
         # Далее ждем смс. Проверяем что на экране нет ошибок
         sms = ''
@@ -100,11 +102,11 @@ async def make_job(device):
 
         if 'decline' in payment_result:
             logger.info(f'Отклоняем {payment_id}')
-            await change_payment_status(payment_id, -1)
+            await change_payment_status(payment_id, -1, logger=logger)
 
         if payment_result == 'accept':
             logger.info(f'Подтверждаем {payment_id}')
-            await change_payment_status(payment_id, 9)
+            await change_payment_status(payment_id, 9, logger=logger)
             await device.sendAai(params='{action:["click","sleep(500)"],query:"D:Back to home page"}')
             await asyncio.sleep(5)
 
@@ -114,16 +116,16 @@ async def make_job(device):
         logger.info(f'Логика закончена. {Back.GREEN}Result: {payment_result}.{Style.RESET_ALL} Общее время: {time.perf_counter() - script_start} c.')
 
     except asyncio.TimeoutError as e:
-        log.warning(f'Timeout: {e}')
-        await change_payment_status(device.payment['id'], -1)
+        logger.warning(f'Timeout: {e}')
+        await change_payment_status(device.payment['id'], -1, logger=logger)
         logger.info('Платеж отклонен')
 
     except DeviceInputAmountException as e:
         logger.info('Отправляем платеж заново боту. Телефон на рестарт')
-        await change_payment_status(device.payment['id'], 4)
+        await change_payment_status(device.payment['id'], 4, logger=logger)
 
     except Exception as e:
-        log.error(f'Непредвиденная ошибка: {e}')
+        logger.error(f'Непредвиденная ошибка: {e}')
         raise e
 
     finally:
@@ -145,6 +147,5 @@ if __name__ == '__main__':
         # asyncio.run(make_job())
         pass
     except Exception as err:
-        log.error(err)
         raise err
 
