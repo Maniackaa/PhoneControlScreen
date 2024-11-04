@@ -286,8 +286,10 @@ class Device:
                                         headers=headers,
                                         data=data
                                         ) as response:
+                    self.logger().debug(f'{url} {response.status}')
                     if response.status == 200:
                         result = await response.json(content_type='application/json', encoding='UTF-8')
+                        self.logger().debug(result)
                         return result
         except Exception as e:
             logger.error(e)
@@ -357,7 +359,11 @@ class Device:
         result_rect = json.dumps(rect).replace(' ', '')
         url = f'{self.device_url}/screen/texts?token={TOKEN}&rect={result_rect}&lang={lang}&mode={mode}'
         res = await self.get_url(url)
-        self.logger().debug(json.dumps(res))
+        if lang == 'rus':
+            self.logger().debug(json.dumps(res, ensure_ascii=False))
+        else:
+            self.logger().debug(json.dumps(res, ensure_ascii=True))
+
         return res.get('value', '')
 
     async def ready_response_check(self) -> bool:
@@ -424,9 +430,14 @@ class Device:
         self.device_status = DeviceStatus.END
 
     async def alt_tab(self):
-        await self.input(code="recentapp")
-        await asyncio.sleep(1)
-        await self.input(code="recentapp")
+        # await self.input(code="recentapp")
+        # await asyncio.sleep(1)
+        # await self.input(code="recentapp")
+        # await asyncio.sleep(1)
+        await self.input(code="home")
+        await asyncio.sleep(0.5)
+        url = f'{self.device_url}/apps/com.m10?state=active&token={TOKEN}'
+        res = await self.post_url(url)
         await asyncio.sleep(1)
 
     async def check_field(self, field):

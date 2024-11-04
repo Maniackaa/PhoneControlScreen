@@ -33,14 +33,10 @@ async def card_data_input(device: Device, card, exp, cvv, log=None):
     # await asyncio.sleep(1)
     # Клик на продолжить
     # res = await device.sendAai(params='{action:"click",query:"TP:more&&R:card-pay-btn"}' )
-    res = await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
-    if res.get('value') == {'retval': True}:
-        logger.info('Ввод данных карты завершен. Кнопка нажата')
-        device.device_status = DeviceStatus.STEP2_1
-    else:
-        logger.error(f'Не нажалась кнопка Оплатить на вводе карты!!! Пробую еще раз')
-        await asyncio.sleep(3)
-        await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
+    await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
+    await asyncio.sleep(3)
+    await device.sendAai(params='{action:"click",query:"TP:more&&T:Оплатить"}')
+    device.device_status = DeviceStatus.STEP2_1
 
 
 async def main():
@@ -48,7 +44,7 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        await card_data_input(device, '4169738848626770', '06/27', '555')
+        await card_data_input(device, '4169738848626770', '06/27', '556')
         end = time.perf_counter()
         print(end - start)
 

@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 
+from config.bot_settings import logger
 from database.db import Device
 from services.total_api import device_list
 
@@ -21,10 +22,12 @@ async def main():
             #
 
             # print(end - start)
-            res = await device.read_screen_text(lang='eng')
-            print(res)
-            device.logger().info(f'{json.dumps(res, ensure_ascii=False)}')
-
+            res = await device.read_screen_text(rect='[0,20,100,80]', lang='eng')
+            # print(res)
+            # try:
+            #     logger.info(f'{json.dumps(res, ensure_ascii=False)}')
+            # except Exception as e:
+            #     raise e
             end = time.perf_counter()
             print(end - start)
 

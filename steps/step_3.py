@@ -101,6 +101,7 @@ async def sms_code_input_kapital(device: Device, sms_code, log=None) -> str:
 
     # Ввели смс-код
     while True:
+        logger.debug(f'Ввели код. Ищем концовки')
         text_eng = await device.read_screen_text()
         payment_result = await check_bad_result(device, text_eng=text_eng)
         device.device_status = DeviceStatus.STEP4_4
@@ -109,6 +110,8 @@ async def sms_code_input_kapital(device: Device, sms_code, log=None) -> str:
             payment_result = 'accept'
         if payment_result:
             return payment_result
+        if 'enjoying the app' in text_eng.lower():
+            await device.click(int(50 * device.device_data.width / 100), int(50 * device.device_data.height / 100))
         await asyncio.sleep(2)
 
 
@@ -144,6 +147,8 @@ async def sms_code_input_abb(device: Device, sms_code, log=None) -> str:
         if 'on the way' in text_eng.lower():
             logger.info(f'Подтверждаем платеж')
             return 'accept'
+        if 'enjoying the app' in text_eng.lower():
+            await device.click(int(50 * device.device_data.width / 100), int(50 * device.device_data.height / 100))
         await asyncio.sleep(2)
 
 

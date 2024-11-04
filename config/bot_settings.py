@@ -73,7 +73,7 @@ LOG_PATH = BASE_DIR / 'logs'
 
 handlers = {
     "console": {
-        "level": "INFO",
+        "level": "DEBUG",
         "class": "logging.StreamHandler",
         "formatter": "colored",
     },
