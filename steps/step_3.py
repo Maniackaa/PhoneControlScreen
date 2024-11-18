@@ -17,11 +17,14 @@ async def ready_wait(device, field_query, log=None) -> bool:
     logger = log.bind(step=device.device_status)
     is_ready = await check_field(device, field_query)
     while not is_ready:
-        await device.alt_tab()
         logger.info(f'После ввода карты прошло: {(datetime.datetime.now() - device.STEP2_END).total_seconds()} с.')
-        await asyncio.sleep(2)
-        is_ready = await check_field(device, field_query)
+        text_rus = await device.read_screen_text(lang='rus')
+        if 'аутентификации' in text_rus.lower():
+            logger.info('Найден выбор режима. Жму кнопульку')
+            await device.click_on_field('T:Отправить')
         await asyncio.sleep(1)
+        await device.alt_tab()
+        is_ready = await check_field(device, field_query)
     return True
 
 

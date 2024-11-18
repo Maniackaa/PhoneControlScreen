@@ -90,7 +90,7 @@ async def check_payment(payment_id, count=0) -> dict:
         return {}
 
 
-async def change_payment_status(payment_id: str, status: int, count=1, logger=structlog.get_logger('main')):
+async def change_payment_status(payment_id: str, status: int, count=1, logger=structlog.get_logger('main'), phone_name=None):
     """Смена статуса платежа
     Заявка создана - 0.
     Переданы данные карты - 3
@@ -108,6 +108,7 @@ async def change_payment_status(payment_id: str, status: int, count=1, logger=st
                    }
         json_data = {
             'status': status,
+            'phone_name': phone_name
         }
         async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
             async with session.put(url, headers=headers, json=json_data, ssl=False) as response:
@@ -120,9 +121,10 @@ async def change_payment_status(payment_id: str, status: int, count=1, logger=st
                     logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН!: {await response.text()}')
                     return
                 else:
-                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! response: {response.status} {await response.text()}')
+                    text = await response.text()
+                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! response: {response.status} {text}')
                     if count >= 3:
-                        logger.error(f'Ошибка при изменении статуса после 3 попыток {payment_id}')
+                        logger.error(f'Ошибка при изменении статуса после 3 попыток {payment_id}: {text}')
                         return {'status': 'error check_payment'}
                     await asyncio.sleep(count)
                     logger.debug(f'Еще попытка сменить статус {payment_id}')
@@ -164,12 +166,12 @@ async def get_worker_payments(count=0) -> list:
 
 async def main():
     await get_token()
-    status = 9
+    status = 3
     # p = await check_payment('b7fc538d-cab3-4c29-823b-c4a927d49590')
     # print(p, type(p))
     # ps = await get_worker_payments()
     # print(ps)
-    await change_payment_status('6e6f23b4-f049-4b74-ac55-235ee61968d6', status, logger=logger)
+    await change_payment_status('6ae7e5f9-c721-4894-bb0d-a9cc4b8a63ea', status, logger=logger, phone_name='xxx1')
 
 
 if __name__ == '__main__':

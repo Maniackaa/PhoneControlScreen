@@ -130,7 +130,8 @@ async def main():
                             device.payment = payment
                             device.device_status = DeviceStatus.STEP0
                             device.JOB_START = datetime.datetime.now()
-                            result = await change_payment_status(payment_id=payment['id'], status=8)
+                            result = await change_payment_status(payment_id=payment['id'], status=8,
+                                                                 phone_name=device.device_data.device_name)
                             if result:
                                 asyncio.create_task(make_job(device), name=f'{device.device_id}')
                                 log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
