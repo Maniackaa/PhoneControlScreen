@@ -20,11 +20,11 @@ async def card_data_input(device: Device, card, exp, cvv, log=None):
         log = device.logger()
     logger = log.bind(step=device.device_status)
     logger.debug('Начат ввод данных карты:')
-    is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
+    is_ready = await check_field(device, "TP:more&&T:Заполните данные карты")
     print(is_ready)
     while not is_ready:
         await device.alt_tab()
-        is_ready = await check_field(device, '{query:"TP:more&&T:Заполните данные карты"}')
+        is_ready = await check_field(device, "TP:more&&T:Заполните данные карты")
         await asyncio.sleep(1)
     card_f = f'{card[:4]} {card[4:8]} {card[8:12]} {card[12:]}'
     await device.sendAai(f'{{action: "setText({card_f})", query: "BP:editable&&IX:0"}}')
@@ -44,7 +44,8 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        await card_data_input(device, '4169738848626770', '06/27', '556')
+        # await card_data_input(device, '4169738848626770', '06/27', '556')
+        await card_data_input(device, '5243754438854570', '09/29', '596')
         end = time.perf_counter()
         print(end - start)
 

@@ -24,7 +24,8 @@ async def main():
             res = await device.read_screen_text(lang='eng')
             print(res)
             device.logger().info(f'{json.dumps(res, ensure_ascii=False)}')
-
+            res = await device.read_screen_text(lang='rus')
+            # device.logger().info(f'{json.dumps(res, ensure_ascii=True)}')
             end = time.perf_counter()
             print(end - start)
 

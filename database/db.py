@@ -275,6 +275,8 @@ class Device:
                     return result
 
     async def post_url(self, url, data=None, headers=None) -> dict:
+        logger.debug(f'post_url: {url}')
+        logger.debug(f'post_data: {data}')
         await self.check_timer()
         if headers is None:
             headers = {}
@@ -322,9 +324,17 @@ class Device:
         res = await self.input(**{'x': x, 'y': y})
         return res
 
+    async def click_percent(self, x, y):
+        x = int(x * self.device_data.width / 100)
+        y = int(y * self.device_data.width / 100)
+        res = await self.input(**{'x': x, 'y': y})
+        return res
+
     async def click_on_field(self, field):
+        q = f'{{action:"click",query:"{field}"}}'
+        print(q)
         res = await self.sendAai(
-                params=f'{{action:"click",query:"{field}"}}'
+                params=q
             )
         return res
 
@@ -371,8 +381,8 @@ class Device:
         Проверяет готовность ища поле D:Top up
         :return: bool
         """
-
         json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
+        logger.debug(f'ready_response_check: {json_res}')
         value = json_res.get('value')
         if isinstance(value, dict):
             if value.get('count') == 1:

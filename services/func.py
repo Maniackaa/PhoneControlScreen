@@ -40,12 +40,15 @@ def make_screenshot():
     return screenshot
 
 
-async def check_field(device, params) -> bool:
+async def check_field(device, field) -> bool:
     """Ишем есть ли поле
     :param device:
-    :param params: '{query:"TP:more&&R:cardPan"}'
+    # :param params: '{query:"TP:more&&R:cardPan"}'
+    :param params: "TP:more&&R:cardPan"
     :return:
     """
+    params = f'{{query:"{field}"}}'
+    print(params)
 
     json_res = await device.sendAai(
         params=params
@@ -59,7 +62,7 @@ async def check_field(device, params) -> bool:
 
 async def check_bad_result(device: Device, text_rus=None, text_eng=None) -> str:
     """
-    Проверяет признаки плохого платежа: тексты неверный, wrong, failed и поле D:Transaction failed
+    Проверяет признаки плохого платежа: тексты неверный, некорректный wrong, failed и поле D:Transaction failed
     :param device:
     :param text_rus:
     :param text_eng:
@@ -71,13 +74,25 @@ async def check_bad_result(device: Device, text_rus=None, text_eng=None) -> str:
         text_eng = await device.read_screen_text(lang='eng')
     log = logger.bind(device_id=device.device_id)
     payment_result = ''
-    is_failed = await check_field(device, params='{query:"TP:all&&D:Transaction failed"}')
+    is_failed = await check_field(device, "TP:all&&D:Transaction failed")
     if is_failed:
         log.info('Найдено поле Transaction failed')
         payment_result = 'decline'
-    is_incorrect = 'неверный' in text_rus.lower() or 'wrong' in text_eng.lower() or 'failed' in text_eng.lower()
+
+    text_rus = text_rus.lower()
+    text_eng = text_eng.lower()
+    checks = []
+    rus_bad_words = ['неверный', 'некорректный']
+    eng_bad_words = ['wrong', 'failed']
+
+    for word in rus_bad_words:
+        checks.append(word in text_rus)
+    for word in eng_bad_words:
+        checks.append(word in text_eng)
+
+    is_incorrect = any(checks)
     if is_incorrect:
-        logger.info('Найдено поле Неверный срок или Неверный номер')
+        logger.info('Найдено плохое поле')
         payment_result = 'decline. restart'
     return payment_result
 

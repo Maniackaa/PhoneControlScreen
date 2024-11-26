@@ -15,7 +15,7 @@ from services.total_api import device_list
 
 from steps.step_1 import amount_input_step
 from steps.step_2 import card_data_input
-from steps.step_3 import sms_code_input_kapital, sms_code_input_abb
+from steps.step_3 import sms_code_input_kapital, sms_code_input_uni, sms_code_input_abb_or_rabit
 
 """5239151723408467 06/27"""
 
@@ -95,7 +95,9 @@ async def make_job(device):
         device.device_status = DeviceStatus.STEP4_0
         if not payment_result:
             if bank_name in ['abb', 'rabit']:
-                payment_result = await sms_code_input_abb(device, sms)
+                payment_result = await sms_code_input_abb_or_rabit(device, sms)
+            elif bank_name in ['uni']:
+                payment_result = await sms_code_input_uni(device, sms)
             else:
                 payment_result = await sms_code_input_kapital(device, sms)
         device.device_status = DeviceStatus.STEP4_5
@@ -132,7 +134,7 @@ async def make_job(device):
         exception_name, exception_value, _ = sys.exc_info()
         if not isinstance(exception_value, asyncio.exceptions.CancelledError):
             await device.click_on_field(field="D:Back to home page")
-            is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
+            is_ready = await check_field(device, "TP:more&&D:Top up")
             if is_ready:
                 pass
             else:

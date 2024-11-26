@@ -22,21 +22,23 @@ async def amount_input(device: Device, amount: str, log=None):
         log = device.logger()
     logger = log.bind(step=device.device_status)
     logger.info(f'Начинается ввод суммы {amount} azn')
-    # is_ready = await check_field(device, '{query:"TP:more&&D:Top up"}')
-    is_ready = await device.ready_response_check()
-    while not is_ready:
-        is_ready = await device.ready_response_check()
-        await asyncio.sleep(1)
+    # is_ready = await device.ready_response_check()
+    # while not is_ready:
+    #     is_ready = await device.ready_response_check()
+    #     await asyncio.sleep(1)
 
     res = await device.sendAai(
         params='{action:["click","sleep(500)"],query:"TP:more&&D:Top up"}')
     device.device_status = DeviceStatus.STEP1_0
-    is_ready = await check_field(device, '{query:"TP:findText,Top-up wallet"}')
+    # is_ready = await check_field(device, "TP:findText,Top-up wallet")
+    is_ready = await check_field(device, "TP:more&&D:Top-up wallet")
     while not is_ready:
-        is_ready = await check_field(device, '{query:"TP:findText,Top-up wallet"}')
+        logger.debug(f'поле TP:findText,Top-up wallet не найдено')
+        is_ready = await check_field(device, "TP:more&&D:Top-up wallet")
         await asyncio.sleep(1)
 
     # Ввод суммы
+    logger.debug('Ввод суммы')
     res = await device.sendAai(
         params='{action:["click","sleep(500)","setText(' + amount + ')"],query:"TP:findText,Top-up wallet&&OY:1"}')
     # await asyncio.sleep(1)
@@ -64,16 +66,20 @@ async def amount_input_step(device: Device, amount: str, log=None) -> bool:
     device.device_status = DeviceStatus.STEP1_2
     await asyncio.sleep(7)
 
-    text = await device.read_screen_text()
-    if 'failed' in text:
-        await device.restart()
-        raise DeviceInputAmountException('')
+    # text = await device.read_screen_text()
+    # if 'failed' in text:
+    #     await device.restart()
+    #     raise DeviceInputAmountException('')
 
     # Ждем загрузки экрана карты
     is_ready = False
     while not is_ready:
+        text = await device.read_screen_text()
+        if 'failed' in text:
+            await device.restart()
+            raise DeviceInputAmountException('')
         text = await device.read_screen_text(lang='rus')
-        is_ready = await check_field(device, params='{query:"TP:more&&T:Заполните данные карты"}') or 'Заполните данные карты' in text
+        is_ready = await check_field(device, "TP:more&&T:Заполните данные карты") or 'Заполните данные карты' in text
         logger.debug(f'is_ready: {is_ready}')
         if is_ready:
             device.device_status = DeviceStatus.STEP2_0
@@ -81,6 +87,8 @@ async def amount_input_step(device: Device, amount: str, log=None) -> bool:
             logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({round(end - start, 1)} c.)')
             break
         await asyncio.sleep(1)
+        await device.click_percent(30, 80)
+
     return True
 
 
