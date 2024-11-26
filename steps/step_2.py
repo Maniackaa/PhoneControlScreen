@@ -44,8 +44,7 @@ async def main():
     if devices:
         device = Device(devices[0])
         start = time.perf_counter()
-        # await card_data_input(device, '4169738848626770', '06/27', '556')
-        await card_data_input(device, '5243754438854570', '09/29', '596')
+        await card_data_input(device, '5243754438854570', '09/29', '555')
         end = time.perf_counter()
         print(end - start)
 
