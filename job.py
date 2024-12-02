@@ -94,7 +94,7 @@ async def make_job(device):
         logger.info(f'payment_result: {payment_result}')
         device.device_status = DeviceStatus.STEP4_0
         if not payment_result:
-            if bank_name in ['abb', 'rabit']:
+            if bank_name in ['abb', 'rabit', 'afb', 'yelo', 'express']:
                 payment_result = await sms_code_input_abb_or_rabit(device, sms)
             elif bank_name in ['uni']:
                 payment_result = await sms_code_input_uni(device, sms)

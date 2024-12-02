@@ -120,7 +120,7 @@ async def sms_code_input_kapital(device: Device, sms_code, log=None) -> str:
 
 
 async def sms_code_input_abb_or_rabit(device: Device, sms_code, log=None) -> str:
-    # Банки: 'abb', 'rabit', 'uni'
+    # Банки: 'abb', 'rabit', 'afb', 'yelo', 'express'
     if not log:
         log = device.logger()
     logger = log.bind(step=device.device_status)
