@@ -190,18 +190,27 @@ async def sms_code_input_uni(device: Device, sms_code, log=None) -> str:
     device.device_status = DeviceStatus.STEP4_3
 
     # await device.click_on_field(confirm_button_field)
+    x_coord = 40
+    ratio = device.device_data.width / device.device_data.height
+    logger.debug(f'ratio: {ratio}')
+    if ratio == 0.45:
+        y_input = 32
+        y_confirm = 39
+    else:
+        y_input = 37.3
+        y_confirm = 48.68
 
     # Тыкаем на поле и вставляем
-    x = int(30 * device.device_data.width / 100)
-    y = int(32 * device.device_data.height / 100)
+    x = int(x_coord * device.device_data.width / 100)
+    y = int(y_input * device.device_data.height / 100)
     await device.click(x, y)
     await asyncio.sleep(1)
     await device.text(text=f'{sms_code}')
     await asyncio.sleep(1)
 
     # Жмем подтвердить
-    x = int(40 * device.device_data.width / 100)
-    y = int(39 * device.device_data.height / 100)
+    x = int(x_coord * device.device_data.width / 100)
+    y = int(y_confirm * device.device_data.height / 100)
     await device.click(x, y)
     await asyncio.sleep(1)
 

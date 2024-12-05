@@ -69,6 +69,14 @@ async def main():
     asyncio.create_task(key_wait())
     await get_token()
     connected_devices_ids = set()
+    devices_ids = await device_list() or []
+    # ["1864548471","907929276","10394501","875635955"]
+    ids_list = '['
+    for dev_id in devices_ids:
+        id_num = '\"' + dev_id.split('@')[1] + '\",'
+        ids_list += id_num
+    ids_list += ']'
+    input(f'список подключенных: {ids_list}')
     while True:
         try:
             devices_ids = await device_list() or []
@@ -143,6 +151,7 @@ async def main():
         except Exception as e:
             log.error(e)
             await asyncio.sleep(1)
+            input('enter')
 
 
 if __name__ == '__main__':
@@ -151,4 +160,5 @@ if __name__ == '__main__':
     except Exception as error:
         print(error)
         input('Enter')
+        time.sleep(20)
 

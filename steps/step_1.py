@@ -74,6 +74,10 @@ async def amount_input_step(device: Device, amount: str, log=None) -> bool:
     # Ждем загрузки экрана карты
     is_ready = False
     while not is_ready:
+        # Повторно кликаем на кнопочку продолжить на всяк случай
+        await device.sendAai(
+            params='{action:"click",query:"TP:findText,Continue"}'
+        )
         text = await device.read_screen_text()
         if 'failed' in text:
             await device.restart()
@@ -85,11 +89,9 @@ async def amount_input_step(device: Device, amount: str, log=None) -> bool:
             device.device_status = DeviceStatus.STEP2_0
             end = time.perf_counter()
             logger.info(f'Ввод суммы закончен. Экран ввода карты готов. ({round(end - start, 1)} c.)')
-            break
-        await asyncio.sleep(1)
+            return True
+        await asyncio.sleep(2)
         await device.click_percent(30, 80)
-
-    return True
 
 
 async def main():
