@@ -11,7 +11,7 @@ import requests
 import sqlalchemy
 import structlog
 from sqlalchemy import create_engine, ForeignKey, String, DateTime, \
-    Integer, select, delete, Text, BLOB
+    Integer, select, delete, Text, BLOB, Float
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -57,19 +57,19 @@ class Base(DeclarativeBase):
             return self
 
 
-class User(Base):
-    __tablename__ = 'users'
-    id: Mapped[int] = mapped_column(primary_key=True,
-                                    autoincrement=True)
-    tg_id: Mapped[str] = mapped_column(String(30), unique=True)
-    username: Mapped[str] = mapped_column(String(100), nullable=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=True)
-    register_date: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
-    fio: Mapped[str] = mapped_column(String(200), nullable=True)
-    is_active: Mapped[int] = mapped_column(Integer(), default=0)
-
-    def __repr__(self):
-        return f'{self.id}. {self.username or "-"} {self.tg_id}'
+# class User(Base):
+#     __tablename__ = 'users'
+#     id: Mapped[int] = mapped_column(primary_key=True,
+#                                     autoincrement=True)
+#     tg_id: Mapped[str] = mapped_column(String(30), unique=True)
+#     username: Mapped[str] = mapped_column(String(100), nullable=True)
+#     name: Mapped[str] = mapped_column(String(100), nullable=True)
+#     register_date: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
+#     fio: Mapped[str] = mapped_column(String(200), nullable=True)
+#     is_active: Mapped[int] = mapped_column(Integer(), default=0)
+#
+#     def __repr__(self):
+#         return f'{self.id}. {self.username or "-"} {self.tg_id}'
 
 
 class DeviceStatus(Enum):
@@ -110,6 +110,8 @@ class DeviceData(Base):
     start_job_time: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
     screen_text: Mapped[str] = mapped_column(Text(), nullable=True)
     last_screen_change: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=True)
+    turnover: Mapped[float] = mapped_column(Float(), default=0)
+    balance: Mapped[float] = mapped_column(Float(), default=0)
 
     def __str__(self):
         return f'DeviceData({self.id}. {self.device_id}. {self.device_status})'
@@ -459,6 +461,20 @@ class Device:
             if value.get('count') == 1:
                 return True
         return False
+
+    async def turnover_add(self, amount):
+        self.device_data.set('turnover', self.device_data.turnover + float(amount))
+
+    async def get_raw_balance(self):
+        try:
+            balance_field = await self.sendAai(
+                params='{action:"getDescription",query:"TP:more&&D:Available balance&&OY:1"}')
+            if balance_field.get('status') is True:
+                balance_raw = balance_field['value']['retval']
+                self.logger().debug(f'balance_raw: {balance_raw}')
+                return balance_raw
+        except Exception as e:
+            self.logger().error(e)
 
 
 if not database_exists(db_url):

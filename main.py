@@ -33,7 +33,6 @@ async def prepare(device_id):
     device.device_data.set('width', info['width'])
     device.device_data.set('manufacturer', info['manufacturer'])
 
-
 def testprint1():
     devices = sync_device_list()
     print('ctrl+1')
@@ -66,7 +65,7 @@ async def test(device):
 
 
 async def main():
-    asyncio.create_task(key_wait())
+    # asyncio.create_task(key_wait())
     await get_token()
     connected_devices_ids = set()
     devices_ids = await device_list() or []
@@ -76,6 +75,7 @@ async def main():
         id_num = '\"' + dev_id.split('@')[1] + '\",'
         ids_list += id_num
     ids_list += ']'
+    print(f'PHONES={ids_list}')
     input(f'список подключенных: {ids_list}')
     while True:
         try:
@@ -116,8 +116,9 @@ async def main():
                     if is_ready:
                         device.device_status = DeviceStatus.READY
                         ready_devices.append(device)
+                        device_balance = await device.get_raw_balance()
                         device_text += (
-                            f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.GREEN}Готов   {Style.RESET_ALL}'
+                            f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.GREEN}Готов  ({device_balance} / {device.device_data.turnover}) {Style.RESET_ALL}'
                             f'({device.device_status.name} {device.device_status.value})'
                         )
                     else:
@@ -130,7 +131,7 @@ async def main():
             print(device_text)
 
             payments = await get_worker_payments()
-            print(f'Платежей: {len(payments)}')
+            ready_devices.sort(key=lambda x: x.device_data.turnover)
             for payment in payments:
                 for device in ready_devices:
                     if device.device_status == DeviceStatus.READY:
@@ -145,13 +146,12 @@ async def main():
                                 log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
                                 break
 
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
         except asyncio.TimeoutError as e:
             log.info(f'Лимит времени одно из телефонов вышел!: {e}')
         except Exception as e:
             log.error(e)
             await asyncio.sleep(1)
-            input('enter')
 
 
 if __name__ == '__main__':
@@ -160,5 +160,4 @@ if __name__ == '__main__':
     except Exception as error:
         print(error)
         input('Enter')
-        time.sleep(20)
 

@@ -109,6 +109,8 @@ async def make_job(device):
         if payment_result == 'accept':
             logger.info(f'Подтверждаем {payment_id}')
             await change_payment_status(payment_id, 9, logger=logger)
+            await device.turnover_add(amount)
+
             await device.sendAai(params='{action:["click","sleep(500)"],query:"D:Back to home page"}')
             await asyncio.sleep(5)
 

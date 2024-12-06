@@ -7,6 +7,7 @@ import requests
 import structlog
 import winsound
 from aiohttp import ClientTimeout
+from aiohttp_retry import RetryClient, ExponentialRetry
 
 from config.bot_settings import settings, BASE_DIR, logger
 
@@ -14,9 +15,9 @@ data = {
     'refresh': '',
     'access': ''
 }
+retry_options = ExponentialRetry(attempts=3, start_timeout=5, factor=5)
 
-
-async def get_token():
+async def get_token(count=0):
     logger.info(f'Получение первичного токена по логину {settings.ASUPAY_LOGIN}')
     try:
         login = settings.ASUPAY_LOGIN
@@ -28,15 +29,25 @@ async def get_token():
         })
         headers = {'Content-Type': 'application/json'}
         print(url)
-        response = requests.request("POST", url, headers=headers, data=payload, timeout=5)
-        logger.info(response.status_code)
-        token_dict = response.json()
-        data['refresh'] = token_dict.get('refresh')
-        data['access'] = token_dict.get('access')
-        logger.info(f'data: {data}')
-        return token_dict
+        # response = requests.request("POST", url, headers=headers, data=payload, timeout=5)
+        async with aiohttp.ClientSession(timeout=ClientTimeout(5)) as session:
+            retry_client = RetryClient(session, raise_for_status=False, retry_options=retry_options)
+            async with retry_client.post(url, headers=headers, data=payload, ssl=False) as response:
+                token_dict = await response.json()
+                data['refresh'] = token_dict.get('refresh')
+                data['access'] = token_dict.get('access')
+                logger.info(f'data: {data}')
+                return token_dict
+    except aiohttp.client_exceptions.ClientConnectorError:
+        logger.warning(f'Нет интернета. Попытка {count}')
+        if count < 3:
+            await asyncio.sleep(count * 5)
+            return await get_token(count=count + 1)
     except Exception as err:
         logger.error(f'Ошибка получения токена по логину/паролю: {err}')
+        print('----------')
+        print(err, type(err), err.__class__)
+        print('----------')
         raise err
 
 
@@ -48,45 +59,51 @@ async def refresh_token() -> str:
             "refresh": data['refresh']
         })
         headers = {'Content-Type': 'application/json'}
-        response = requests.request("POST", url, headers=headers, data=payload, timeout=5)
-        if response.status_code == 401:
-            await get_token()
-            return data['access']
-        token_dict = response.json()
-        print(token_dict)
-        access_token = token_dict.get('access')
-        logger.debug(f'access_token: {access_token}')
-        data['access'] = access_token
-        logger.info(f'data: {data}')
-        return access_token
+        # response = requests.request("POST", url, headers=headers, data=payload, timeout=5)
+        async with aiohttp.ClientSession(timeout=ClientTimeout(5)) as session:
+            retry_client = RetryClient(session, raise_for_status=False, retry_options=retry_options)
+            async with retry_client.post(url, headers=headers, data=payload, ssl=False) as response:
+                if response.status == 401:
+                    await get_token()
+                    return data['access']
+                token_dict = await response.json()
+                access_token = token_dict.get('access')
+                logger.debug(f'access_token: {access_token}')
+                data['access'] = access_token
+                logger.info(f'data: {data}')
+                return access_token
     except Exception as err:
         logger.error(f'Ошибка обновления токена: {err}')
 
 
 async def check_payment(payment_id, count=0) -> dict:
     url = f"{settings.ASU_HOST}/api/v1/payment_status/{payment_id}/"
-    logger.debug(f'Проверка статуса {url}')
+    log = logger.bind(payment_id=payment_id)
+    log.debug(f'Проверка статуса {url}')
     headers = {
         'Authorization': f'Bearer {data["access"]}'
     }
     try:
+        # async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
+        #     async with session.get(url, headers=headers, ssl=False) as response:
         async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
-            async with session.get(url, headers=headers, ssl=False) as response:
+            retry_client = RetryClient(session, raise_for_status=False, retry_options=retry_options)
+            async with retry_client.get(url, headers=headers, ssl=False) as response:
                 if response.status == 200:
-                    logger.debug(f'{response.status}')
+                    log.debug(f'{response.status}')
                     result = await response.json()
                     return result
                 elif response.status == 401:
                     if count > 3:
                         return {'status': 'error check_payment'}
-                    logger.debug('Обновляем токен')
+                    log.debug('Обновляем токен')
                     await asyncio.sleep(count)
                     await refresh_token()
                     return await check_payment(payment_id, count=count + 1)
                 else:
-                    logger.error(f'Плохой статус: {response.status} {await response.text()}')
+                    log.error(f'Плохой статус: {response.status} {await response.text()}')
     except Exception as err:
-        logger.error(f'Ошибка: {err}')
+        log.error(f'Ошибка: {err}')
         return {}
 
 
@@ -100,7 +117,8 @@ async def change_payment_status(payment_id: str, status: int, count=1, logger=st
     Мерч передал смс - 6.
     """
     try:
-        logger.debug(f'Смена статуса платежа № {count} {payment_id} на: {status}')
+        log = logger.bind(payment_id=payment_id, operation=f'Смена статуса платежа на {status}')
+        log.debug(f'Смена статуса платежа № {count} {payment_id} на: {status}')
         url = f'{settings.ASU_HOST}/api/v1/payment_status/{payment_id}/'
         headers = {
             'Content-Type': 'application/json',
@@ -110,27 +128,31 @@ async def change_payment_status(payment_id: str, status: int, count=1, logger=st
             'status': status,
             'phone_name': phone_name
         }
+        # async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
+        #     async with session.put(url, headers=headers, json=json_data, ssl=False) as response:
         async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
-            async with session.put(url, headers=headers, json=json_data, ssl=False) as response:
+            retry_client = RetryClient(session, raise_for_status=False, retry_options=retry_options)
+            async with retry_client.put(url, headers=headers, json=json_data, ssl=False) as response:
+                log.debug(f'{response.status}')
                 if response.status == 200:
-                    logger.debug(f'Статус {payment_id} изменен на {status}')
+                    log.debug(f'Статус {payment_id} изменен на {status}')
                     result = await response.json()
-                    logger.debug(result)
+                    log.debug(result)
                     return result
                 elif response.status == 400:
-                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН!: {await response.text()}')
+                    log.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН!: {await response.text()}')
                     return
                 else:
                     text = await response.text()
-                    logger.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! response: {response.status} {text}')
+                    log.warning(f'Статус {payment_id} НЕ ИЗМЕНЕН! response: {response.status} {text}')
                     if count >= 3:
-                        logger.error(f'Ошибка при изменении статуса после 3 попыток {payment_id}: {text}')
+                        log.error(f'Ошибка при изменении статуса после 3 попыток {payment_id}: {text}')
                         return {'status': 'error check_payment'}
                     await asyncio.sleep(count)
-                    logger.debug(f'Еще попытка сменить статус {payment_id}')
+                    log.debug(f'Еще попытка сменить статус {payment_id}')
                     return await change_payment_status(payment_id, status, count=count+1, logger=logger)
     except Exception as err:
-        logger.error(f'Ошибка при смене статуса {payment_id}')
+        log.error(f'Ошибка при смене статуса {payment_id}')
         # raise err
 
 
@@ -167,12 +189,12 @@ async def get_worker_payments(count=0) -> list:
 async def main():
     await get_token()
     status = 3
-    # p = await check_payment('b7fc538d-cab3-4c29-823b-c4a927d49590')
-    # print(p, type(p))
-    # ps = await get_worker_payments()
-    # print(ps)
-    await change_payment_status('6ae7e5f9-c721-4894-bb0d-a9cc4b8a63ea', status, logger=logger, phone_name='xxx1')
-
+    start = time.perf_counter()
+    payment_id = 'd7270edc-7907-4eca-930c-34ae94530d73'
+    p = await check_payment(payment_id)
+    print(p, type(p))
+    await change_payment_status(payment_id, status, logger=logger, phone_name='xxx1')
+    print(time.perf_counter() - start)
 
 if __name__ == '__main__':
     # asyncio.run(get_token())

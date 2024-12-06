@@ -83,7 +83,7 @@ async def check_bad_result(device: Device, text_rus=None, text_eng=None) -> str:
     text_eng = text_eng.lower()
     checks = []
     rus_bad_words = ['неверный', 'некорректный']
-    eng_bad_words = ['wrong', 'failed']
+    eng_bad_words = ['wrong', 'failed', 'error']
 
     for word in rus_bad_words:
         checks.append(word in text_rus)
@@ -109,7 +109,6 @@ async def wait_new_field(device, params, limit=60):
         await asyncio.sleep(2)
         is_ready = await check_field(device, params)
     return True
-
 
 
 

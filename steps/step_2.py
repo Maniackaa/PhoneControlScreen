@@ -21,7 +21,6 @@ async def card_data_input(device: Device, card, exp, cvv, log=None):
     logger = log.bind(step=device.device_status)
     logger.debug('Начат ввод данных карты:')
     is_ready = await check_field(device, "TP:more&&T:Заполните данные карты")
-    print(is_ready)
     while not is_ready:
         await device.alt_tab()
         is_ready = await check_field(device, "TP:more&&T:Заполните данные карты")

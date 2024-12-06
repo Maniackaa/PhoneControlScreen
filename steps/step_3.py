@@ -38,11 +38,9 @@ async def sms_code_input_kapital(device: Device, sms_code, log=None) -> str:
         log = device.logger()
     logger = log.bind(step=device.device_status)
     text_eng = await device.read_screen_text()
-    print(text_eng)
     while 'enter dynamic' not in text_eng.lower():
         logger.debug(f'Ищем Enter dynamic')
         text_eng = await device.read_screen_text()
-        print(text_eng)
         await asyncio.sleep(1)
         payment_result = await check_bad_result(device)
         if payment_result:
