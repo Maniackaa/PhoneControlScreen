@@ -12,6 +12,7 @@ async def main():
         device = Device(devices[0])
         is_ready = await device.ready_response_check()
         print(is_ready)
+        print(await device.info)
 
 if __name__ == '__main__':
     asyncio.run(main())

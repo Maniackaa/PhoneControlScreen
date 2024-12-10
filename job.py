@@ -45,7 +45,8 @@ async def make_job(device):
         await card_data_input(device, card,  exp, cvv)
         device.STEP2_END = datetime.datetime.now()  # Время ввода данных карты
 
-        await change_payment_status(payment_id, 5, logger=logger)
+        await change_payment_status(payment_id, 5, logger=logger,
+                                    turnover=device.device_data.turnover, balance_i=device.device_data.balance)
         device.device_status = DeviceStatus.STEP3_0
         # Далее ждем смс. Проверяем что на экране нет ошибок
         sms = ''

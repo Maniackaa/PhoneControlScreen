@@ -20,7 +20,7 @@ from sqlalchemy_utils import database_exists, create_database
 
 
 # db_url = f"postgresql+psycopg2://{conf.db.db_user}:{conf.db.db_password}@{conf.db.db_host}:{conf.db.db_port}/{conf.db.database}"
-from config.bot_settings import BASE_DIR, settings, logger
+from config.bot_settings import BASE_DIR, settings, logger as log
 
 db_path = BASE_DIR / 'base.sqlite'
 db_url = f"sqlite:///{db_path}"
@@ -133,7 +133,7 @@ def get_or_create_device_data(device_id) -> DeviceData:
             return device_data
 
     except Exception as err:
-        logger.error(f'Дата не создана: {err}', exc_info=True)
+        log.error(f'Дата не создана: {err}', exc_info=True)
 
 
 @dataclasses.dataclass
@@ -195,7 +195,7 @@ class Device:
             session.add(device_data)
             session.commit()
             if old_value != value:
-                logger.debug(f'Изменен счетчик таймера {self.device_id} на {value}')
+                log.debug(f'Изменен счетчик таймера {self.device_id} на {value}')
 
     @property
     def device_status(self) -> DeviceStatus:
@@ -212,7 +212,7 @@ class Device:
             session.add(device_data)
             session.commit()
             if old_status != status:
-                logger.debug(f'Изменен статус {self.device_id} на {status}')
+                log.debug(f'Изменен статус {self.device_id} на {status}')
 
     async def check_timer(self):
         # Проверка не завис ли экран или не вышел ли таймер
@@ -258,9 +258,10 @@ class Device:
         # print(processors)
         # new_processors = processors[:-1] + [add_phone_name] + [processors[-1]]
         # structlog.configure(processors=new_processors)
-        logger: structlog.stdlib.BoundLogger = structlog.get_logger(name, phone_name=f'{self.device_data.device_name}')
+        # logger: structlog.stdlib.BoundLogger = structlog.get_logger(name, phone_name=f'{self.device_data.device_name}')
+        device_logger = log.bind(phone_name=f'{self.device_data.device_name}')
         # logger.info(f'Для {self} присвоен логгер {name}')
-        return logger
+        return device_logger
 
     async def get_url(self, url, params=None, headers=None) -> dict:
         await self.check_timer()
@@ -276,9 +277,9 @@ class Device:
                     result = await response.json(content_type='application/json', encoding='UTF-8')
                     return result
 
-    async def post_url(self, url, data=None, headers=None) -> dict:
-        logger.debug(f'post_url: {url}')
-        logger.debug(f'post_data: {data}')
+    async def post_url(self, url, data=None, headers=None, files=None) -> dict:
+        log.debug(f'post_url: {url}')
+        log.debug(f'post_data: {data}')
         await self.check_timer()
         if headers is None:
             headers = {}
@@ -293,10 +294,10 @@ class Device:
                     self.logger().debug(f'{url} {response.status}')
                     if response.status == 200:
                         result = await response.json(content_type='application/json', encoding='UTF-8')
-                        self.logger().debug(result)
+                        self.logger().debug(f'{result}')
                         return result
         except Exception as e:
-            logger.error(e)
+            log.error(e)
             raise e
 
     @property
@@ -313,6 +314,12 @@ class Device:
         res = await self.post_url(url, data=req_data)
         self.logger().debug(f'sendAai {params}: {res}')
         return res
+
+    async def upload_file(self, target_dir: str, file_bytes: bytes):
+        files = {
+            'tesseract/tessdata': file_bytes,
+        }
+        await self.post_url(f'{self.device_url}/storage', files=files)
 
     async def input(self, **kwargs):
         req_data = {"token": TOKEN,
@@ -384,7 +391,7 @@ class Device:
         :return: bool
         """
         json_res = await self.sendAai(params='{query:"TP:more&&D:Top up"}')
-        logger.debug(f'ready_response_check: {json_res}')
+        log.debug(f'ready_response_check: {json_res}')
         value = json_res.get('value')
         if isinstance(value, dict):
             if value.get('count') == 1:
@@ -471,7 +478,6 @@ class Device:
                 params='{action:"getDescription",query:"TP:more&&D:Available balance&&OY:1"}')
             if balance_field.get('status') is True:
                 balance_raw = balance_field['value']['retval']
-                self.logger().debug(f'balance_raw: {balance_raw}')
                 return balance_raw
         except Exception as e:
             self.logger().error(e)

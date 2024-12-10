@@ -9,8 +9,9 @@ import structlog
 from config.bot_settings import logger as log, settings
 from database.db import Device, DeviceStatus
 from job import make_job
+from services.adb_func import upload_tess_data
 from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
-from services.func import get_card_data, wait_new_field, check_field
+from services.func import get_card_data, wait_new_field, check_field, convert_amount_value
 from services.total_api import device_list, sync_device_list
 from colorama import init, Fore, Back, Style
 
@@ -19,6 +20,13 @@ from steps.step_1 import amount_input
 from steps.step_2 import card_data_input
 from steps.step_3 import sms_code_input_kapital
 """5239151723408467 06/27"""
+
+
+async def restart_job(device):
+    try:
+        await device.restart()
+    except Exception as e:
+        log.error(str(e))
 
 
 async def prepare(device_id):
@@ -33,40 +41,42 @@ async def prepare(device_id):
     device.device_data.set('width', info['width'])
     device.device_data.set('manufacturer', info['manufacturer'])
 
-def testprint1():
-    devices = sync_device_list()
-    print('ctrl+1')
-    print(devices)
-    for device_id in devices:
-        device = Device(device_id)
-        print(device)
-    num = input('Введите номер: ')
-    print(num)
-    # device.device_status = DeviceStatus.STEP4_3
-
-def testprint2():
-    print('ctrl+2')
-
-
-async def key_wait():
-    try:
-        keyboard.add_hotkey('ctrl+1', testprint1)
-        keyboard.add_hotkey('ctrl+2', testprint2)
-
-    except Exception as err:
-        print(err)
-        input('Нажмите Enter')
+# def testprint1():
+#     devices = sync_device_list()
+#     print('ctrl+1')
+#     print(devices)
+#     for device_id in devices:
+#         device = Device(device_id)
+#         print(device)
+#     num = input('Введите номер: ')
+#     print(num)
+#     # device.device_status = DeviceStatus.STEP4_3
+#
+# def testprint2():
+#     print('ctrl+2')
 
 
-async def test(device):
-    device.logger().info('Test')
-    logger2: structlog.stdlib.BoundLogger = structlog.get_logger('new')
-    logger2.info('test 2')
+# async def key_wait():
+#     try:
+#         keyboard.add_hotkey('ctrl+1', testprint1)
+#         keyboard.add_hotkey('ctrl+2', testprint2)
+#
+#     except Exception as err:
+#         print(err)
+#         input('Нажмите Enter')
+
+
+# async def test(device):
+#     device.logger().info('Test')
+#     logger2: structlog.stdlib.BoundLogger = structlog.get_logger('new')
+#     logger2.info('test 2')
 
 
 async def main():
     # asyncio.create_task(key_wait())
+
     await get_token()
+    upload_tess_data()
     connected_devices_ids = set()
     devices_ids = await device_list() or []
     # ["1864548471","907929276","10394501","875635955"]
@@ -103,6 +113,8 @@ async def main():
 
             ready_devices = []
             device_text = ''
+            now = datetime.datetime.now()
+            print(now.strftime('%H:%M:%S'))
             for num, device_id in enumerate(devices_ids, 1):
                 device = Device(device_id)
                 # asyncio.create_task(test(device), name=f'{device.device_id} {str(datetime.datetime.now(tz=settings.tz))}')
@@ -117,12 +129,17 @@ async def main():
                         device.device_status = DeviceStatus.READY
                         ready_devices.append(device)
                         device_balance = await device.get_raw_balance()
+                        if device_balance:
+                            clear_balance = convert_amount_value(device_balance)
+                            device.device_data.set('balance', clear_balance)
                         device_text += (
                             f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.GREEN}Готов  ({device_balance} / {device.device_data.turnover}) {Style.RESET_ALL}'
                             f'({device.device_status.name} {device.device_status.value})'
                         )
                     else:
                         device_text += f'\n{num}) {device.device_data.device_name} ({device_id}): {Back.RED}Неизвестная херня!  {Style.RESET_ALL}\n'
+                        # Рестартируем
+                        asyncio.create_task(restart_job(device))
                 else:
                     timer_text = ''
                     if device.STEP2_END:

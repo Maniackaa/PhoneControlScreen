@@ -82,7 +82,7 @@ handlers = {
         # "class": "logging.handlers.WatchedFileHandler",
         "class": "logging.handlers.TimedRotatingFileHandler",
         "filename": LOG_PATH / "script.log",
-        "formatter": "colored",
+        "formatter": "plain",
         'when': 'h',
         'interval': 1,
         'backupCount': 0
@@ -103,7 +103,8 @@ for device_id in device_ids:
         'when': 'h',
         'interval': 1,
         'backupCount': 0,
-        "formatter": "colored",
+        # "formatter": "colored",
+        "formatter": "plain",
     }
 
     loggers[device_id] = {"handlers": ["console", f"{device_id}"],
@@ -120,7 +121,8 @@ logging.config.dictConfig(
                 "()": structlog.stdlib.ProcessorFormatter,
                 "processors": [
                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.dev.ConsoleRenderer(colors=False),
+                    # structlog.dev.ConsoleRenderer(colors=False),
+                    structlog.processors.JSONRenderer(ensure_ascii=True)
                 ],
                 "foreign_pre_chain": pre_chain,
             },
@@ -161,8 +163,8 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         # If some value is in bytes, decode it to a Unicode str.
-        structlog.processors.UnicodeDecoder(encoding='utf-8'),
-        # structlog.processors.UnicodeEncoder(encoding='utf-8'),
+        # structlog.processors.UnicodeDecoder(),
+        # structlog.processors.UnicodeEncoder(),
         # Add callsite parameters.
         structlog.processors.CallsiteParameterAdder(
             {
@@ -181,6 +183,7 @@ structlog.configure(
         structlog.stdlib.ExtraAdder(),
         add_phone_name,
         structlog.dev.ConsoleRenderer(colors=True),
+        # structlog.processors.JSONRenderer()
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     # wrapper_class=AsyncBoundLogger,
@@ -191,29 +194,31 @@ structlog.configure(
 logger: structlog.stdlib.BoundLogger = structlog.get_logger('main')
 logger.info('Логгер OK')
 
-pprint({
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "plain": {
-                "()": structlog.stdlib.ProcessorFormatter,
-                "processors": [
-                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.dev.ConsoleRenderer(colors=False),
-                ],
-                "foreign_pre_chain": pre_chain,
-            },
-            "colored": {
-                "()": structlog.stdlib.ProcessorFormatter,
-                "processors": [
-                    extract_from_record,
-                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.dev.ConsoleRenderer(colors=True),
-                ],
-                "foreign_pre_chain": pre_chain,
-            },
-        },
-        "handlers": handlers,
-        "loggers": loggers,
+# pprint({
+#         "version": 1,
+#         "disable_existing_loggers": False,
+#         "formatters": {
+#             "plain": {
+#                 "()": structlog.stdlib.ProcessorFormatter,
+#                 "processors": [
+#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+#                     structlog.dev.ConsoleRenderer(colors=False),
+#                 ],
+#                 "foreign_pre_chain": pre_chain,
+#             },
+#             "colored": {
+#                 "()": structlog.stdlib.ProcessorFormatter,
+#                 "processors": [
+#                     extract_from_record,
+#                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+#                     structlog.dev.ConsoleRenderer(colors=True),
+#                 ],
+#                 "foreign_pre_chain": pre_chain,
+#             },
+#         },
+#         "handlers": handlers,
+#         "loggers": loggers,
+#
+#     })
 
-    })
+logger.info("Манат 'MANAT SIGN' (U+20BC) ₼")

@@ -111,7 +111,13 @@ async def wait_new_field(device, params, limit=60):
     return True
 
 
-
+def convert_amount_value(string) -> float:
+    """Преобразовывает +1,0m 2.4m в число"""
+    try:
+        result = ''.join([c if c in ['.', ',', '-'] or c.isdigit() else '' for c in string]).replace(',', '.')
+        return float(result)
+    except ValueError:
+        logger.debug('Не нашлось число')
 
 async def get_card_data():
     return '1;5462631218826164;08/25;299;3434'
