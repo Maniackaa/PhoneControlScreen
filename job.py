@@ -45,8 +45,7 @@ async def make_job(device):
         await card_data_input(device, card,  exp, cvv)
         device.STEP2_END = datetime.datetime.now()  # Время ввода данных карты
 
-        await change_payment_status(payment_id, 5, logger=logger,
-                                    turnover=device.device_data.turnover, balance_i=device.device_data.balance)
+        await change_payment_status(payment_id, 5, logger=logger)
         device.device_status = DeviceStatus.STEP3_0
         # Далее ждем смс. Проверяем что на экране нет ошибок
         sms = ''
@@ -109,7 +108,11 @@ async def make_job(device):
 
         if payment_result == 'accept':
             logger.info(f'Подтверждаем {payment_id}')
-            await change_payment_status(payment_id, 9, logger=logger)
+            await change_payment_status(payment_id, 9,
+                                        phone_name=device.device_data.device_name,
+                                        turnover=device.device_data.turnover,
+                                        balance_i=device.device_data.balance,
+                                        logger=logger)
             await device.turnover_add(amount)
 
             await device.sendAai(params='{action:["click","sleep(500)"],query:"D:Back to home page"}')
@@ -130,7 +133,7 @@ async def make_job(device):
         await change_payment_status(device.payment['id'], 4, logger=logger)
 
     except Exception as e:
-        logger.error(f'Непредвиденная ошибка: {e}')
+        logger.error(f'Непредвиденная ошибка: {type(e)} {e}')
         raise e
 
     finally:

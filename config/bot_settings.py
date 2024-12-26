@@ -77,19 +77,27 @@ handlers = {
         "class": "logging.StreamHandler",
         "formatter": "colored",
     },
+    "console_file": {
+        "level": "DEBUG",
+        "class": "logging.handlers.TimedRotatingFileHandler",
+        "filename": LOG_PATH / "console_file.log",
+        "formatter": "plain",
+        'when': 'h',
+        'interval': 1,
+        'backupCount': 24 * 30
+    },
     "file": {
         "level": "DEBUG",
-        # "class": "logging.handlers.WatchedFileHandler",
         "class": "logging.handlers.TimedRotatingFileHandler",
         "filename": LOG_PATH / "script.log",
         "formatter": "plain",
         'when': 'h',
         'interval': 1,
-        'backupCount': 0
+        'backupCount': 24 * 30
     },
 }
 
-loggers = {"main": {"handlers": ["console", "file"],
+loggers = {"main": {"handlers": ["console", "console_file", "file"],
                     "level": "DEBUG",
                     "propagate": True,
                     },
@@ -102,12 +110,12 @@ for device_id in device_ids:
         "filename": LOG_PATH / f"{device_id}.log",
         'when': 'h',
         'interval': 1,
-        'backupCount': 0,
+        'backupCount': 24 * 30,
         # "formatter": "colored",
         "formatter": "plain",
     }
 
-    loggers[device_id] = {"handlers": ["console", f"{device_id}"],
+    loggers[device_id] = {"handlers": [f"{device_id}"],
                           "level": "DEBUG",
                           "propagate": True,
                           }
@@ -146,8 +154,9 @@ logging.config.dictConfig(
 def add_phone_name(a, b, event_dict):
 
     if 'phone_name' in event_dict.keys():
-        phone_label = f"-{event_dict.get('phone_name'):2}-"
-        event_dict['event'] = f"{phone_label} {event_dict['event']}"
+        phone_label = f"-{event_dict.get('phone_name', ''):2}-"
+        if event_dict.get('event'):
+            event_dict['event'] = f"{phone_label} {event_dict['event']}"
     return event_dict
 
 

@@ -1,17 +1,15 @@
 import asyncio
 import datetime
-import json
 import time
 
 import keyboard
-import structlog
 
 from config.bot_settings import logger as log, settings
 from database.db import Device, DeviceStatus
 from job import make_job
-from services.adb_func import upload_tess_data
-from services.asu_func import get_worker_payments, get_token, check_payment, change_payment_status
-from services.func import get_card_data, wait_new_field, check_field, convert_amount_value
+# from services.adb_func import upload_tess_data
+from services.asu_func import get_worker_payments, get_token, change_payment_status
+from services.func import convert_amount_value
 from services.total_api import device_list, sync_device_list
 from colorama import init, Fore, Back, Style
 
@@ -76,7 +74,7 @@ async def main():
     # asyncio.create_task(key_wait())
 
     await get_token()
-    upload_tess_data()
+    # upload_tess_data()
     connected_devices_ids = set()
     devices_ids = await device_list() or []
     # ["1864548471","907929276","10394501","875635955"]
@@ -153,12 +151,15 @@ async def main():
                 for device in ready_devices:
                     if device.device_status == DeviceStatus.READY:
                         if device.is_job_free:
-                            device.payment = payment
-                            device.device_status = DeviceStatus.STEP0
-                            device.JOB_START = datetime.datetime.now()
+
                             result = await change_payment_status(payment_id=payment['id'], status=8,
-                                                                 phone_name=device.device_data.device_name)
+                                                                 phone_name=device.device_data.device_name,
+                                                                 turnover=device.device_data.turnover,
+                                                                 balance_i=device.device_data.balance)
                             if result:
+                                device.payment = payment
+                                device.device_status = DeviceStatus.STEP0
+                                device.JOB_START = datetime.datetime.now()
                                 asyncio.create_task(make_job(device), name=f'{device.device_id}')
                                 log.info(f'{Back.BLUE}Стартовала задача{Style.RESET_ALL}: {device, payment}')
                                 break

@@ -470,7 +470,7 @@ class Device:
         return False
 
     async def turnover_add(self, amount):
-        self.device_data.set('turnover', self.device_data.turnover + float(amount))
+        self.device_data.set('turnover', round(self.device_data.turnover + float(amount), 2))
 
     async def get_raw_balance(self):
         try:

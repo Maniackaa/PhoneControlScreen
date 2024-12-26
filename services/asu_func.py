@@ -129,7 +129,8 @@ async def change_payment_status(payment_id: str, status: int, count=1, logger=st
             'status': status,
             'phone_name': phone_name,
             'balance_i': balance_i,
-            'turnover': turnover
+            'turnover': turnover,
+            'username': settings.ASUPAY_LOGIN,
         }
         # async with aiohttp.ClientSession(timeout=ClientTimeout(10)) as session:
         #     async with session.put(url, headers=headers, json=json_data, ssl=False) as response:
@@ -199,15 +200,18 @@ async def get_worker_payments(count=0) -> list:
 async def main():
     # winsound.PlaySound((BASE_DIR / 'media' / 'sound' / 'wrong.wav').as_posix(), winsound.SND_FILENAME)
     await get_token()
-    status = 9
+    # w = await get_worker_payments()
+    # print(w)
+    status = 4
     start = time.perf_counter()
-    payment_id = 'f2eea28b-d477-47c2-b0fc-be02c270c6e1'
+    payment_id = 'ab1b2c6b-7ddb-4105-a109-b62938c777e5'
     p = await check_payment(payment_id)
     print(p, type(p))
-    await change_payment_status(payment_id, status, logger=logger,
-                                phone_name='xxx1',
-                                balance_i='1', turnover='1'
+    r = await change_payment_status(payment_id, status, logger=logger,
+                                phone_name='Xe8_553768957',
+                                balance_i=5, turnover=3
                                 )
+    print(r)
     print(time.perf_counter() - start)
 
 if __name__ == '__main__':
