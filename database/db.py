@@ -301,11 +301,17 @@ class Device:
             raise e
 
     @property
-    async def info(self):
+    async def info(self) -> dict:
         url = f'{self.device_url}?token={TOKEN}'
         result = await self.get_url(url)
         value = result.get('value', '')
         return value
+
+    @property
+    async def phone_name(self):
+        info = await self.info
+        phone_name = info['name']
+        return phone_name
 
     async def sendAai(self, params):
         req_data = {"token": TOKEN,

@@ -82,9 +82,21 @@ async def main():
     for dev_id in devices_ids:
         id_num = '\"' + dev_id.split('@')[1] + '\",'
         ids_list += id_num
+
+        device = Device(dev_id)
+        phone_name = await device.phone_name
+        log.debug(f'Проверка имени {device}: {phone_name}')
+        if '_' not in phone_name:
+            raise ValueError(f'{Back.YELLOW}Имя телефона "{phone_name}" не корректное{Style.RESET_ALL}')
+        else:
+            name, number = phone_name.split('_')
+            if len(number) != 9:
+                raise ValueError(f'{Back.YELLOW}Имя телефона "{phone_name}" не корректное{Style.RESET_ALL}')
+
     ids_list += ']'
     print(f'PHONES={ids_list}')
     input(f'список подключенных: {ids_list}')
+
     while True:
         try:
             devices_ids = await device_list() or []
@@ -177,5 +189,5 @@ if __name__ == '__main__':
         asyncio.run(main())
     except Exception as error:
         print(error)
-        input('Enter')
+        input(f'{error} Enter\n')
 
